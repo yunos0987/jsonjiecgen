@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+/tests/inputs/*.txt
+.claude/settings.local.json
+.vscode/launch.json

@@ -1,0 +1,11 @@
+{
+    "type": "object",
+    "properties": {
+        "name":     { "type": "string" },
+        "value":    { "type": "number" },
+        "count":    { "type": "integer" },
+        "active":   { "type": "boolean" },
+        "readings": { "type": "array", "items": { "type": "number" }, "maxItems": 3 },
+        "tags":     { "type": "array", "items": { "type": "string" }, "maxItems": 2 }
+    }
+}

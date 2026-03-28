@@ -1,0 +1,17 @@
+{
+    "type": "object",
+    "properties": {
+        "name": { "type": "string" },
+        "pos": {
+            "type": "object",
+            "properties": {
+                "x": { "type": "number" },
+                "y": { "type": "number" },
+                "z": { "type": "number" }
+            }
+        },
+        "tags":   { "type": "array", "items": { "type": "string" },  "maxItems": 3 },
+        "counts": { "type": "array", "items": { "type": "integer" }, "maxItems": 3 },
+        "active": { "type": "boolean" }
+    }
+}

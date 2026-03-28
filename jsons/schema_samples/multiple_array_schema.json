@@ -1,0 +1,15 @@
+{
+    "type": "object",
+    "properties": {
+        "matrix": {
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "integer" }, "maxItems": 3 },
+            "maxItems": 2
+        },
+        "grid": {
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "number" }, "maxItems": 2 },
+            "maxItems": 3
+        }
+    }
+}

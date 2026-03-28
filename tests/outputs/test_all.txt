@@ -1,0 +1,79 @@
+(* $ jiecc ./tests/outputs/test_all.txt -D_TEST_ -I./tests/outputs -I<jiecunit root> -I<jiecunit root>/sys -o ./test_all.xml -t omron *)
+{#include <jiecunit.txt>}
+
+{#ifdef _TEST_}
+DEFINE_CONFIGURATION(
+	_JIEC_TESTNAMES_LIST_(
+		// Simple
+		'test_Simple_jsonstr_to_data',
+		'test_Simple_data_to_jsonstr',
+		'test_Simple_jsonbytes_to_data',
+		'test_Simple_data_to_jsonbytes',
+		// Various
+		'test_Various_jsonstr_to_data',
+		'test_Various_data_to_jsonstr',
+		'test_Various_jsonbytes_to_data',
+		'test_Various_data_to_jsonbytes',
+		// SimpleSchema
+		'test_SimpleSchema_jsonstr_to_data',
+		'test_SimpleSchema_data_to_jsonstr',
+		'test_SimpleSchema_jsonbytes_to_data',
+		'test_SimpleSchema_data_to_jsonbytes',
+		// VariousSchema
+		'test_VariousSchema_jsonstr_to_data',
+		'test_VariousSchema_data_to_jsonstr',
+		'test_VariousSchema_jsonbytes_to_data',
+		'test_VariousSchema_data_to_jsonbytes',
+		// NestedObj3
+		'test_NestedObj3_jsonstr_to_data',
+		'test_NestedObj3_data_to_jsonstr',
+		'test_NestedObj3_jsonbytes_to_data',
+		'test_NestedObj3_data_to_jsonbytes',
+		// MultipleAry3
+		'test_MultipleAry3_jsonstr_to_data',
+		'test_MultipleAry3_data_to_jsonstr',
+		'test_MultipleAry3_jsonbytes_to_data',
+		'test_MultipleAry3_data_to_jsonbytes',
+		// SimpleAry
+		'test_SimpleAry_jsonstr_to_data',
+		'test_SimpleAry_data_to_jsonstr',
+		'test_SimpleAry_jsonbytes_to_data',
+		'test_SimpleAry_data_to_jsonbytes',
+		// StructureAry
+		'test_StructureAry_jsonstr_to_data',
+		'test_StructureAry_data_to_jsonstr',
+		'test_StructureAry_jsonbytes_to_data',
+		'test_StructureAry_data_to_jsonbytes',
+		// StructAry3
+		'test_StructAry3_jsonstr_to_data',
+		'test_StructAry3_data_to_jsonstr',
+		'test_StructAry3_jsonbytes_to_data',
+		'test_StructAry3_data_to_jsonbytes',
+		// MultiAryStruct
+		'test_MultiAryStruct_jsonstr_to_data',
+		'test_MultiAryStruct_data_to_jsonstr',
+		'test_MultiAryStruct_jsonbytes_to_data',
+		'test_MultiAryStruct_data_to_jsonbytes',
+		// shared helpers
+		'test_json_char_from_asciicharcode',
+		'test_json_asciicharcode',
+		'test_json_bytes_insert_str',
+		'test_json_find_key',
+		'test_json_bytes_find_key',
+		'test_json_escape',
+		'test_json_unescape'
+	)
+)
+{#undef _TEST_}
+{#endif}
+
+{#include <test_simple.txt>}
+{#include <test_various.txt>}
+{#include <test_simple_schema.txt>}
+{#include <test_various_schema.txt>}
+{#include <test_nested_obj_3.txt>}
+{#include <test_multiple_ary_3.txt>}
+{#include <test_simple_ary.txt>}
+{#include <test_structure_ary.txt>}
+{#include <test_struct_ary_3.txt>}
+{#include <test_multi_ary_struct.txt>}

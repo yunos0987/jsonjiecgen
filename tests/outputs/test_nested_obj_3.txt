@@ -1,0 +1,762 @@
+(* $ jiecc ./tests/outputs/test_nested_obj_3.txt -D_TEST_ -I./tests/outputs -I<jiecunit root> -I<jiecunit root>/sys -o ./test_nested_obj_3.xml -t omron *)
+{#include <jiecunit.txt>}
+{#include <nested_obj_3.txt>}
+
+{#ifdef _TEST_}
+DEFINE_CONFIGURATION(
+	_JIEC_TESTNAMES_LIST_(
+		'test_NestedObj3_jsonstr_to_data',
+		'test_NestedObj3_data_to_jsonstr',
+		'test_NestedObj3_jsonbytes_to_data',
+		'test_NestedObj3_data_to_jsonbytes',
+		'test_json_char_from_asciicharcode',
+		'test_json_asciicharcode',
+		'test_json_bytes_insert_str',
+		'test_json_find_key',
+		'test_json_bytes_find_key',
+		'test_json_escape',
+		'test_json_unescape'
+	)
+)
+{#undef _TEST_}
+{#endif}
+
+TEST_S(test_NestedObj3_jsonstr_to_data)
+	var
+		json: string[1024];
+		data: NestedObj3_t;
+	end
+	{st}
+	json := '{"m1":{"m2_1":"data:\"{2-1}\",\"{2-1}\"","m2_2":{"m3_1":"data:\"{2-2}\",\"{2-2}\"","m3_2":{"m4_1":"data:\"{2-3}\",\"{2-3}\""},"m3_3":{"m4_1":"data:\"{2-4}\",\"{2-4}\""}},"m2_3":{"m3_1":"data:\"{2-5}\",\"{2-5}\"","m3_2":{"m4_1":"data:\"{2-6}\",\"{2-6}\""},"m3_3":{"m4_1":"data:\"{2-7}\",\"{2-7}\""}}}}';
+	NestedObj3_jsonstr_to_data(json, data);
+	EXPECT_EQ_STRING('data:"{2-1}","{2-1}"', data.m1.m2_1);
+	EXPECT_EQ_STRING('data:"{2-2}","{2-2}"', data.m1.m2_2.m3_1);
+	EXPECT_EQ_STRING('data:"{2-3}","{2-3}"', data.m1.m2_2.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-4}","{2-4}"', data.m1.m2_2.m3_3.m4_1);
+	EXPECT_EQ_STRING('data:"{2-5}","{2-5}"', data.m1.m2_3.m3_1);
+	EXPECT_EQ_STRING('data:"{2-6}","{2-6}"', data.m1.m2_3.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-7}","{2-7}"', data.m1.m2_3.m3_3.m4_1);
+	{end}
+END_TEST_S
+
+TEST_S(test_NestedObj3_data_to_jsonstr)
+	var
+		data: NestedObj3_t;
+		data_rt: NestedObj3_t;
+		json: string[1024];
+	end
+	{st}
+	data.m1.m2_1 := 'data:"{2-1}","{2-1}"';
+	data.m1.m2_2.m3_1 := 'data:"{2-2}","{2-2}"';
+	data.m1.m2_2.m3_2.m4_1 := 'data:"{2-3}","{2-3}"';
+	data.m1.m2_2.m3_3.m4_1 := 'data:"{2-4}","{2-4}"';
+	data.m1.m2_3.m3_1 := 'data:"{2-5}","{2-5}"';
+	data.m1.m2_3.m3_2.m4_1 := 'data:"{2-6}","{2-6}"';
+	data.m1.m2_3.m3_3.m4_1 := 'data:"{2-7}","{2-7}"';
+	NestedObj3_data_to_jsonstr(data, json);
+	NestedObj3_jsonstr_to_data(json, data_rt);
+	EXPECT_EQ_STRING('data:"{2-1}","{2-1}"', data_rt.m1.m2_1);
+	EXPECT_EQ_STRING('data:"{2-2}","{2-2}"', data_rt.m1.m2_2.m3_1);
+	EXPECT_EQ_STRING('data:"{2-3}","{2-3}"', data_rt.m1.m2_2.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-4}","{2-4}"', data_rt.m1.m2_2.m3_3.m4_1);
+	EXPECT_EQ_STRING('data:"{2-5}","{2-5}"', data_rt.m1.m2_3.m3_1);
+	EXPECT_EQ_STRING('data:"{2-6}","{2-6}"', data_rt.m1.m2_3.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-7}","{2-7}"', data_rt.m1.m2_3.m3_3.m4_1);
+	{end}
+END_TEST_S
+
+TEST_S(test_NestedObj3_jsonbytes_to_data)
+	var
+		data: NestedObj3_t;
+		jsonbytes: array[0..1024] of byte;
+		data_rt: NestedObj3_t;
+	end
+	{st}
+	data.m1.m2_1 := 'data:"{2-1}","{2-1}"';
+	data.m1.m2_2.m3_1 := 'data:"{2-2}","{2-2}"';
+	data.m1.m2_2.m3_2.m4_1 := 'data:"{2-3}","{2-3}"';
+	data.m1.m2_2.m3_3.m4_1 := 'data:"{2-4}","{2-4}"';
+	data.m1.m2_3.m3_1 := 'data:"{2-5}","{2-5}"';
+	data.m1.m2_3.m3_2.m4_1 := 'data:"{2-6}","{2-6}"';
+	data.m1.m2_3.m3_3.m4_1 := 'data:"{2-7}","{2-7}"';
+	NestedObj3_data_to_jsonbytes(data, jsonbytes);
+	NestedObj3_jsonbytes_to_data(jsonbytes, data_rt);
+	EXPECT_EQ_STRING('data:"{2-1}","{2-1}"', data_rt.m1.m2_1);
+	EXPECT_EQ_STRING('data:"{2-2}","{2-2}"', data_rt.m1.m2_2.m3_1);
+	EXPECT_EQ_STRING('data:"{2-3}","{2-3}"', data_rt.m1.m2_2.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-4}","{2-4}"', data_rt.m1.m2_2.m3_3.m4_1);
+	EXPECT_EQ_STRING('data:"{2-5}","{2-5}"', data_rt.m1.m2_3.m3_1);
+	EXPECT_EQ_STRING('data:"{2-6}","{2-6}"', data_rt.m1.m2_3.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-7}","{2-7}"', data_rt.m1.m2_3.m3_3.m4_1);
+	{end}
+END_TEST_S
+
+TEST_S(test_NestedObj3_data_to_jsonbytes)
+	var
+		data: NestedObj3_t;
+		jsonbytes: array[0..1024] of byte;
+		data_rt: NestedObj3_t;
+	end
+	{st}
+	data.m1.m2_1 := 'data:"{2-1}","{2-1}"';
+	data.m1.m2_2.m3_1 := 'data:"{2-2}","{2-2}"';
+	data.m1.m2_2.m3_2.m4_1 := 'data:"{2-3}","{2-3}"';
+	data.m1.m2_2.m3_3.m4_1 := 'data:"{2-4}","{2-4}"';
+	data.m1.m2_3.m3_1 := 'data:"{2-5}","{2-5}"';
+	data.m1.m2_3.m3_2.m4_1 := 'data:"{2-6}","{2-6}"';
+	data.m1.m2_3.m3_3.m4_1 := 'data:"{2-7}","{2-7}"';
+	NestedObj3_data_to_jsonbytes(data, jsonbytes);
+	NestedObj3_jsonbytes_to_data(jsonbytes, data_rt);
+	EXPECT_EQ_STRING('data:"{2-1}","{2-1}"', data_rt.m1.m2_1);
+	EXPECT_EQ_STRING('data:"{2-2}","{2-2}"', data_rt.m1.m2_2.m3_1);
+	EXPECT_EQ_STRING('data:"{2-3}","{2-3}"', data_rt.m1.m2_2.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-4}","{2-4}"', data_rt.m1.m2_2.m3_3.m4_1);
+	EXPECT_EQ_STRING('data:"{2-5}","{2-5}"', data_rt.m1.m2_3.m3_1);
+	EXPECT_EQ_STRING('data:"{2-6}","{2-6}"', data_rt.m1.m2_3.m3_2.m4_1);
+	EXPECT_EQ_STRING('data:"{2-7}","{2-7}"', data_rt.m1.m2_3.m3_3.m4_1);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_char_from_asciicharcode)
+	var
+		res: string[8];
+	end
+	{st}
+	res := json_char_from_asciicharcode(0);
+	EXPECT_EQ_STRING('$00', res);
+	res := json_char_from_asciicharcode(1);
+	EXPECT_EQ_STRING('$01', res);
+	res := json_char_from_asciicharcode(2);
+	EXPECT_EQ_STRING('$02', res);
+	res := json_char_from_asciicharcode(3);
+	EXPECT_EQ_STRING('$03', res);
+	res := json_char_from_asciicharcode(4);
+	EXPECT_EQ_STRING('$04', res);
+	res := json_char_from_asciicharcode(5);
+	EXPECT_EQ_STRING('$05', res);
+	res := json_char_from_asciicharcode(6);
+	EXPECT_EQ_STRING('$06', res);
+	res := json_char_from_asciicharcode(7);
+	EXPECT_EQ_STRING('$07', res);
+	res := json_char_from_asciicharcode(8);
+	EXPECT_EQ_STRING('$08', res);
+	res := json_char_from_asciicharcode(9);
+	EXPECT_EQ_STRING('$t', res);
+	res := json_char_from_asciicharcode(10);
+	EXPECT_EQ_STRING('$n', res);
+	res := json_char_from_asciicharcode(11);
+	EXPECT_EQ_STRING('$0b', res);
+	res := json_char_from_asciicharcode(12);
+	EXPECT_EQ_STRING('$0c', res);
+	res := json_char_from_asciicharcode(13);
+	EXPECT_EQ_STRING('$r', res);
+	res := json_char_from_asciicharcode(14);
+	EXPECT_EQ_STRING('$0e', res);
+	res := json_char_from_asciicharcode(15);
+	EXPECT_EQ_STRING('$0f', res);
+	res := json_char_from_asciicharcode(16);
+	EXPECT_EQ_STRING('$10', res);
+	res := json_char_from_asciicharcode(17);
+	EXPECT_EQ_STRING('$11', res);
+	res := json_char_from_asciicharcode(18);
+	EXPECT_EQ_STRING('$12', res);
+	res := json_char_from_asciicharcode(19);
+	EXPECT_EQ_STRING('$13', res);
+	res := json_char_from_asciicharcode(20);
+	EXPECT_EQ_STRING('$14', res);
+	res := json_char_from_asciicharcode(21);
+	EXPECT_EQ_STRING('$15', res);
+	res := json_char_from_asciicharcode(22);
+	EXPECT_EQ_STRING('$16', res);
+	res := json_char_from_asciicharcode(23);
+	EXPECT_EQ_STRING('$17', res);
+	res := json_char_from_asciicharcode(24);
+	EXPECT_EQ_STRING('$18', res);
+	res := json_char_from_asciicharcode(25);
+	EXPECT_EQ_STRING('$19', res);
+	res := json_char_from_asciicharcode(26);
+	EXPECT_EQ_STRING('$1a', res);
+	res := json_char_from_asciicharcode(27);
+	EXPECT_EQ_STRING('$1b', res);
+	res := json_char_from_asciicharcode(28);
+	EXPECT_EQ_STRING('$1c', res);
+	res := json_char_from_asciicharcode(29);
+	EXPECT_EQ_STRING('$1d', res);
+	res := json_char_from_asciicharcode(30);
+	EXPECT_EQ_STRING('$1e', res);
+	res := json_char_from_asciicharcode(31);
+	EXPECT_EQ_STRING('$1f', res);
+	res := json_char_from_asciicharcode(32);
+	EXPECT_EQ_STRING(' ', res);
+	res := json_char_from_asciicharcode(33);
+	EXPECT_EQ_STRING('!', res);
+	res := json_char_from_asciicharcode(34);
+	EXPECT_EQ_STRING('"', res);
+	res := json_char_from_asciicharcode(35);
+	EXPECT_EQ_STRING('#', res);
+	res := json_char_from_asciicharcode(36);
+	EXPECT_EQ_STRING('$$', res);
+	res := json_char_from_asciicharcode(37);
+	EXPECT_EQ_STRING('%', res);
+	res := json_char_from_asciicharcode(38);
+	EXPECT_EQ_STRING('&', res);
+	res := json_char_from_asciicharcode(39);
+	EXPECT_EQ_STRING('$27', res);
+	res := json_char_from_asciicharcode(40);
+	EXPECT_EQ_STRING('(', res);
+	res := json_char_from_asciicharcode(41);
+	EXPECT_EQ_STRING(')', res);
+	res := json_char_from_asciicharcode(42);
+	EXPECT_EQ_STRING('*', res);
+	res := json_char_from_asciicharcode(43);
+	EXPECT_EQ_STRING('+', res);
+	res := json_char_from_asciicharcode(44);
+	EXPECT_EQ_STRING(',', res);
+	res := json_char_from_asciicharcode(45);
+	EXPECT_EQ_STRING('-', res);
+	res := json_char_from_asciicharcode(46);
+	EXPECT_EQ_STRING('.', res);
+	res := json_char_from_asciicharcode(47);
+	EXPECT_EQ_STRING('/', res);
+	res := json_char_from_asciicharcode(48);
+	EXPECT_EQ_STRING('0', res);
+	res := json_char_from_asciicharcode(49);
+	EXPECT_EQ_STRING('1', res);
+	res := json_char_from_asciicharcode(50);
+	EXPECT_EQ_STRING('2', res);
+	res := json_char_from_asciicharcode(51);
+	EXPECT_EQ_STRING('3', res);
+	res := json_char_from_asciicharcode(52);
+	EXPECT_EQ_STRING('4', res);
+	res := json_char_from_asciicharcode(53);
+	EXPECT_EQ_STRING('5', res);
+	res := json_char_from_asciicharcode(54);
+	EXPECT_EQ_STRING('6', res);
+	res := json_char_from_asciicharcode(55);
+	EXPECT_EQ_STRING('7', res);
+	res := json_char_from_asciicharcode(56);
+	EXPECT_EQ_STRING('8', res);
+	res := json_char_from_asciicharcode(57);
+	EXPECT_EQ_STRING('9', res);
+	res := json_char_from_asciicharcode(58);
+	EXPECT_EQ_STRING(':', res);
+	res := json_char_from_asciicharcode(59);
+	EXPECT_EQ_STRING(';', res);
+	res := json_char_from_asciicharcode(60);
+	EXPECT_EQ_STRING('<', res);
+	res := json_char_from_asciicharcode(61);
+	EXPECT_EQ_STRING('=', res);
+	res := json_char_from_asciicharcode(62);
+	EXPECT_EQ_STRING('>', res);
+	res := json_char_from_asciicharcode(63);
+	EXPECT_EQ_STRING('?', res);
+	res := json_char_from_asciicharcode(64);
+	EXPECT_EQ_STRING('@', res);
+	res := json_char_from_asciicharcode(65);
+	EXPECT_EQ_STRING('A', res);
+	res := json_char_from_asciicharcode(66);
+	EXPECT_EQ_STRING('B', res);
+	res := json_char_from_asciicharcode(67);
+	EXPECT_EQ_STRING('C', res);
+	res := json_char_from_asciicharcode(68);
+	EXPECT_EQ_STRING('D', res);
+	res := json_char_from_asciicharcode(69);
+	EXPECT_EQ_STRING('E', res);
+	res := json_char_from_asciicharcode(70);
+	EXPECT_EQ_STRING('F', res);
+	res := json_char_from_asciicharcode(71);
+	EXPECT_EQ_STRING('G', res);
+	res := json_char_from_asciicharcode(72);
+	EXPECT_EQ_STRING('H', res);
+	res := json_char_from_asciicharcode(73);
+	EXPECT_EQ_STRING('I', res);
+	res := json_char_from_asciicharcode(74);
+	EXPECT_EQ_STRING('J', res);
+	res := json_char_from_asciicharcode(75);
+	EXPECT_EQ_STRING('K', res);
+	res := json_char_from_asciicharcode(76);
+	EXPECT_EQ_STRING('L', res);
+	res := json_char_from_asciicharcode(77);
+	EXPECT_EQ_STRING('M', res);
+	res := json_char_from_asciicharcode(78);
+	EXPECT_EQ_STRING('N', res);
+	res := json_char_from_asciicharcode(79);
+	EXPECT_EQ_STRING('O', res);
+	res := json_char_from_asciicharcode(80);
+	EXPECT_EQ_STRING('P', res);
+	res := json_char_from_asciicharcode(81);
+	EXPECT_EQ_STRING('Q', res);
+	res := json_char_from_asciicharcode(82);
+	EXPECT_EQ_STRING('R', res);
+	res := json_char_from_asciicharcode(83);
+	EXPECT_EQ_STRING('S', res);
+	res := json_char_from_asciicharcode(84);
+	EXPECT_EQ_STRING('T', res);
+	res := json_char_from_asciicharcode(85);
+	EXPECT_EQ_STRING('U', res);
+	res := json_char_from_asciicharcode(86);
+	EXPECT_EQ_STRING('V', res);
+	res := json_char_from_asciicharcode(87);
+	EXPECT_EQ_STRING('W', res);
+	res := json_char_from_asciicharcode(88);
+	EXPECT_EQ_STRING('X', res);
+	res := json_char_from_asciicharcode(89);
+	EXPECT_EQ_STRING('Y', res);
+	res := json_char_from_asciicharcode(90);
+	EXPECT_EQ_STRING('Z', res);
+	res := json_char_from_asciicharcode(91);
+	EXPECT_EQ_STRING('[', res);
+	res := json_char_from_asciicharcode(92);
+	EXPECT_EQ_STRING('\', res);
+	res := json_char_from_asciicharcode(93);
+	EXPECT_EQ_STRING(']', res);
+	res := json_char_from_asciicharcode(94);
+	EXPECT_EQ_STRING('^', res);
+	res := json_char_from_asciicharcode(95);
+	EXPECT_EQ_STRING('_', res);
+	res := json_char_from_asciicharcode(96);
+	EXPECT_EQ_STRING('`', res);
+	res := json_char_from_asciicharcode(97);
+	EXPECT_EQ_STRING('a', res);
+	res := json_char_from_asciicharcode(98);
+	EXPECT_EQ_STRING('b', res);
+	res := json_char_from_asciicharcode(99);
+	EXPECT_EQ_STRING('c', res);
+	res := json_char_from_asciicharcode(100);
+	EXPECT_EQ_STRING('d', res);
+	res := json_char_from_asciicharcode(101);
+	EXPECT_EQ_STRING('e', res);
+	res := json_char_from_asciicharcode(102);
+	EXPECT_EQ_STRING('f', res);
+	res := json_char_from_asciicharcode(103);
+	EXPECT_EQ_STRING('g', res);
+	res := json_char_from_asciicharcode(104);
+	EXPECT_EQ_STRING('h', res);
+	res := json_char_from_asciicharcode(105);
+	EXPECT_EQ_STRING('i', res);
+	res := json_char_from_asciicharcode(106);
+	EXPECT_EQ_STRING('j', res);
+	res := json_char_from_asciicharcode(107);
+	EXPECT_EQ_STRING('k', res);
+	res := json_char_from_asciicharcode(108);
+	EXPECT_EQ_STRING('l', res);
+	res := json_char_from_asciicharcode(109);
+	EXPECT_EQ_STRING('m', res);
+	res := json_char_from_asciicharcode(110);
+	EXPECT_EQ_STRING('n', res);
+	res := json_char_from_asciicharcode(111);
+	EXPECT_EQ_STRING('o', res);
+	res := json_char_from_asciicharcode(112);
+	EXPECT_EQ_STRING('p', res);
+	res := json_char_from_asciicharcode(113);
+	EXPECT_EQ_STRING('q', res);
+	res := json_char_from_asciicharcode(114);
+	EXPECT_EQ_STRING('r', res);
+	res := json_char_from_asciicharcode(115);
+	EXPECT_EQ_STRING('s', res);
+	res := json_char_from_asciicharcode(116);
+	EXPECT_EQ_STRING('t', res);
+	res := json_char_from_asciicharcode(117);
+	EXPECT_EQ_STRING('u', res);
+	res := json_char_from_asciicharcode(118);
+	EXPECT_EQ_STRING('v', res);
+	res := json_char_from_asciicharcode(119);
+	EXPECT_EQ_STRING('w', res);
+	res := json_char_from_asciicharcode(120);
+	EXPECT_EQ_STRING('x', res);
+	res := json_char_from_asciicharcode(121);
+	EXPECT_EQ_STRING('y', res);
+	res := json_char_from_asciicharcode(122);
+	EXPECT_EQ_STRING('z', res);
+	res := json_char_from_asciicharcode(123);
+	EXPECT_EQ_STRING('{', res);
+	res := json_char_from_asciicharcode(124);
+	EXPECT_EQ_STRING('|', res);
+	res := json_char_from_asciicharcode(125);
+	EXPECT_EQ_STRING('}', res);
+	res := json_char_from_asciicharcode(126);
+	EXPECT_EQ_STRING('~', res);
+	res := json_char_from_asciicharcode(127);
+	EXPECT_EQ_STRING('$7f', res);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_asciicharcode)
+	var
+		cd: dint;
+	end
+	{st}
+	cd := json_asciicharcode('$08');
+	EXPECT_EQ_DINT(8, cd);
+	cd := json_asciicharcode('$t');
+	EXPECT_EQ_DINT(9, cd);
+	cd := json_asciicharcode('$n');
+	EXPECT_EQ_DINT(10, cd);
+	cd := json_asciicharcode('$0b');
+	EXPECT_EQ_DINT(11, cd);
+	cd := json_asciicharcode('$0c');
+	EXPECT_EQ_DINT(12, cd);
+	cd := json_asciicharcode('$r');
+	EXPECT_EQ_DINT(13, cd);
+	cd := json_asciicharcode(' ');
+	EXPECT_EQ_DINT(32, cd);
+	cd := json_asciicharcode('!');
+	EXPECT_EQ_DINT(33, cd);
+	cd := json_asciicharcode('"');
+	EXPECT_EQ_DINT(34, cd);
+	cd := json_asciicharcode('#');
+	EXPECT_EQ_DINT(35, cd);
+	cd := json_asciicharcode('$$');
+	EXPECT_EQ_DINT(36, cd);
+	cd := json_asciicharcode('%');
+	EXPECT_EQ_DINT(37, cd);
+	cd := json_asciicharcode('&');
+	EXPECT_EQ_DINT(38, cd);
+	cd := json_asciicharcode('$27');
+	EXPECT_EQ_DINT(39, cd);
+	cd := json_asciicharcode('(');
+	EXPECT_EQ_DINT(40, cd);
+	cd := json_asciicharcode(')');
+	EXPECT_EQ_DINT(41, cd);
+	cd := json_asciicharcode('*');
+	EXPECT_EQ_DINT(42, cd);
+	cd := json_asciicharcode('+');
+	EXPECT_EQ_DINT(43, cd);
+	cd := json_asciicharcode(',');
+	EXPECT_EQ_DINT(44, cd);
+	cd := json_asciicharcode('-');
+	EXPECT_EQ_DINT(45, cd);
+	cd := json_asciicharcode('.');
+	EXPECT_EQ_DINT(46, cd);
+	cd := json_asciicharcode('/');
+	EXPECT_EQ_DINT(47, cd);
+	cd := json_asciicharcode('0');
+	EXPECT_EQ_DINT(48, cd);
+	cd := json_asciicharcode('1');
+	EXPECT_EQ_DINT(49, cd);
+	cd := json_asciicharcode('2');
+	EXPECT_EQ_DINT(50, cd);
+	cd := json_asciicharcode('3');
+	EXPECT_EQ_DINT(51, cd);
+	cd := json_asciicharcode('4');
+	EXPECT_EQ_DINT(52, cd);
+	cd := json_asciicharcode('5');
+	EXPECT_EQ_DINT(53, cd);
+	cd := json_asciicharcode('6');
+	EXPECT_EQ_DINT(54, cd);
+	cd := json_asciicharcode('7');
+	EXPECT_EQ_DINT(55, cd);
+	cd := json_asciicharcode('8');
+	EXPECT_EQ_DINT(56, cd);
+	cd := json_asciicharcode('9');
+	EXPECT_EQ_DINT(57, cd);
+	cd := json_asciicharcode(':');
+	EXPECT_EQ_DINT(58, cd);
+	cd := json_asciicharcode(';');
+	EXPECT_EQ_DINT(59, cd);
+	cd := json_asciicharcode('<');
+	EXPECT_EQ_DINT(60, cd);
+	cd := json_asciicharcode('=');
+	EXPECT_EQ_DINT(61, cd);
+	cd := json_asciicharcode('>');
+	EXPECT_EQ_DINT(62, cd);
+	cd := json_asciicharcode('?');
+	EXPECT_EQ_DINT(63, cd);
+	cd := json_asciicharcode('@');
+	EXPECT_EQ_DINT(64, cd);
+	cd := json_asciicharcode('A');
+	EXPECT_EQ_DINT(65, cd);
+	cd := json_asciicharcode('B');
+	EXPECT_EQ_DINT(66, cd);
+	cd := json_asciicharcode('C');
+	EXPECT_EQ_DINT(67, cd);
+	cd := json_asciicharcode('D');
+	EXPECT_EQ_DINT(68, cd);
+	cd := json_asciicharcode('E');
+	EXPECT_EQ_DINT(69, cd);
+	cd := json_asciicharcode('F');
+	EXPECT_EQ_DINT(70, cd);
+	cd := json_asciicharcode('G');
+	EXPECT_EQ_DINT(71, cd);
+	cd := json_asciicharcode('H');
+	EXPECT_EQ_DINT(72, cd);
+	cd := json_asciicharcode('I');
+	EXPECT_EQ_DINT(73, cd);
+	cd := json_asciicharcode('J');
+	EXPECT_EQ_DINT(74, cd);
+	cd := json_asciicharcode('K');
+	EXPECT_EQ_DINT(75, cd);
+	cd := json_asciicharcode('L');
+	EXPECT_EQ_DINT(76, cd);
+	cd := json_asciicharcode('M');
+	EXPECT_EQ_DINT(77, cd);
+	cd := json_asciicharcode('N');
+	EXPECT_EQ_DINT(78, cd);
+	cd := json_asciicharcode('O');
+	EXPECT_EQ_DINT(79, cd);
+	cd := json_asciicharcode('P');
+	EXPECT_EQ_DINT(80, cd);
+	cd := json_asciicharcode('Q');
+	EXPECT_EQ_DINT(81, cd);
+	cd := json_asciicharcode('R');
+	EXPECT_EQ_DINT(82, cd);
+	cd := json_asciicharcode('S');
+	EXPECT_EQ_DINT(83, cd);
+	cd := json_asciicharcode('T');
+	EXPECT_EQ_DINT(84, cd);
+	cd := json_asciicharcode('U');
+	EXPECT_EQ_DINT(85, cd);
+	cd := json_asciicharcode('V');
+	EXPECT_EQ_DINT(86, cd);
+	cd := json_asciicharcode('W');
+	EXPECT_EQ_DINT(87, cd);
+	cd := json_asciicharcode('X');
+	EXPECT_EQ_DINT(88, cd);
+	cd := json_asciicharcode('Y');
+	EXPECT_EQ_DINT(89, cd);
+	cd := json_asciicharcode('Z');
+	EXPECT_EQ_DINT(90, cd);
+	cd := json_asciicharcode('[');
+	EXPECT_EQ_DINT(91, cd);
+	cd := json_asciicharcode('\');
+	EXPECT_EQ_DINT(92, cd);
+	cd := json_asciicharcode(']');
+	EXPECT_EQ_DINT(93, cd);
+	cd := json_asciicharcode('^');
+	EXPECT_EQ_DINT(94, cd);
+	cd := json_asciicharcode('_');
+	EXPECT_EQ_DINT(95, cd);
+	cd := json_asciicharcode('`');
+	EXPECT_EQ_DINT(96, cd);
+	cd := json_asciicharcode('a');
+	EXPECT_EQ_DINT(97, cd);
+	cd := json_asciicharcode('b');
+	EXPECT_EQ_DINT(98, cd);
+	cd := json_asciicharcode('c');
+	EXPECT_EQ_DINT(99, cd);
+	cd := json_asciicharcode('d');
+	EXPECT_EQ_DINT(100, cd);
+	cd := json_asciicharcode('e');
+	EXPECT_EQ_DINT(101, cd);
+	cd := json_asciicharcode('f');
+	EXPECT_EQ_DINT(102, cd);
+	cd := json_asciicharcode('g');
+	EXPECT_EQ_DINT(103, cd);
+	cd := json_asciicharcode('h');
+	EXPECT_EQ_DINT(104, cd);
+	cd := json_asciicharcode('i');
+	EXPECT_EQ_DINT(105, cd);
+	cd := json_asciicharcode('j');
+	EXPECT_EQ_DINT(106, cd);
+	cd := json_asciicharcode('k');
+	EXPECT_EQ_DINT(107, cd);
+	cd := json_asciicharcode('l');
+	EXPECT_EQ_DINT(108, cd);
+	cd := json_asciicharcode('m');
+	EXPECT_EQ_DINT(109, cd);
+	cd := json_asciicharcode('n');
+	EXPECT_EQ_DINT(110, cd);
+	cd := json_asciicharcode('o');
+	EXPECT_EQ_DINT(111, cd);
+	cd := json_asciicharcode('p');
+	EXPECT_EQ_DINT(112, cd);
+	cd := json_asciicharcode('q');
+	EXPECT_EQ_DINT(113, cd);
+	cd := json_asciicharcode('r');
+	EXPECT_EQ_DINT(114, cd);
+	cd := json_asciicharcode('s');
+	EXPECT_EQ_DINT(115, cd);
+	cd := json_asciicharcode('t');
+	EXPECT_EQ_DINT(116, cd);
+	cd := json_asciicharcode('u');
+	EXPECT_EQ_DINT(117, cd);
+	cd := json_asciicharcode('v');
+	EXPECT_EQ_DINT(118, cd);
+	cd := json_asciicharcode('w');
+	EXPECT_EQ_DINT(119, cd);
+	cd := json_asciicharcode('x');
+	EXPECT_EQ_DINT(120, cd);
+	cd := json_asciicharcode('y');
+	EXPECT_EQ_DINT(121, cd);
+	cd := json_asciicharcode('z');
+	EXPECT_EQ_DINT(122, cd);
+	cd := json_asciicharcode('{');
+	EXPECT_EQ_DINT(123, cd);
+	cd := json_asciicharcode('|');
+	EXPECT_EQ_DINT(124, cd);
+	cd := json_asciicharcode('}');
+	EXPECT_EQ_DINT(125, cd);
+	cd := json_asciicharcode('~');
+	EXPECT_EQ_DINT(126, cd);
+	cd := json_asciicharcode('$00');
+	EXPECT_EQ_DINT(0, cd);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_bytes_insert_str)
+	var
+		raw: array[0..9] of byte;
+		pos: dint;
+	end
+	{st}
+	pos := json_bytes_insert_str(raw, 0, 'AB');
+	EXPECT_EQ_DINT(2, pos);
+	EXPECT_EQ_DINT(65, byte_to_dint(raw[0]));
+	EXPECT_EQ_DINT(66, byte_to_dint(raw[1]));
+	pos := json_bytes_insert_str(raw, pos, '{}');
+	EXPECT_EQ_DINT(4, pos);
+	EXPECT_EQ_DINT(123, byte_to_dint(raw[2]));
+	EXPECT_EQ_DINT(125, byte_to_dint(raw[3]));
+	{end}
+END_TEST_S
+
+TEST_S(test_json_bytes_find_key)
+	var
+		raw: array[0..127] of byte;
+		wp: dint;
+		idx: dint;
+		ok: bool;
+	end
+	{st}
+	// basic: single integer field
+	// {"x":42} - key 'x' value starts at byte 5 ('4' = 52)
+	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"x":42}', eno=>ok);
+	raw[wp] := 0;
+	idx := json_bytes_find_key(raw, 'x');
+	EXPECT_EQ_DINT(5, idx);
+	EXPECT_EQ_DINT(52, byte_to_dint(raw[idx]));
+	// second field: {"a":1,"b":2} - key 'b' value starts at byte 11 ('2' = 50)
+	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"a":1,"b":2}', eno=>ok);
+	raw[wp] := 0;
+	idx := json_bytes_find_key(raw, 'b');
+	EXPECT_EQ_DINT(11, idx);
+	EXPECT_EQ_DINT(50, byte_to_dint(raw[idx]));
+	// nested: key inside nested object is not matched; top-level key is
+	// {"a":{"key":1},"key":2} - top-level 'key' value at byte 21 ('2' = 50)
+	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"a":{"key":1},"key":2}', eno=>ok);
+	raw[wp] := 0;
+	idx := json_bytes_find_key(raw, 'key');
+	EXPECT_EQ_DINT(21, idx);
+	EXPECT_EQ_DINT(50, byte_to_dint(raw[idx]));
+	// not found: eno = false
+	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"other":1}', eno=>ok);
+	raw[wp] := 0;
+	idx := json_bytes_find_key(raw, 'x');
+	EXPECT_EQ_DINT(-1, idx);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_escape)
+	var
+		res: string[JSON_STRING_SIZE];
+	end
+	{st}
+	res := json_escape('"');
+	EXPECT_EQ_STRING('\"', res);
+	res := json_escape('\');
+	EXPECT_EQ_STRING('\\', res);
+	res := json_escape('$t');
+	EXPECT_EQ_STRING('\t', res);
+	res := json_escape('$n');
+	EXPECT_EQ_STRING('\n', res);
+	res := json_escape('$r');
+	EXPECT_EQ_STRING('\r', res);
+	res := json_escape('$08');
+	EXPECT_EQ_STRING('\b', res);
+	res := json_escape('$0c');
+	EXPECT_EQ_STRING('\f', res);
+	res := json_escape('$07');
+	EXPECT_EQ_STRING('\u0007', res);
+	res := json_escape('Hello');
+	EXPECT_EQ_STRING('Hello', res);
+	res := json_escape('a"b');
+	EXPECT_EQ_STRING('a\"b', res);
+	res := json_escape('a$tb');
+	EXPECT_EQ_STRING('a\tb', res);
+	res := json_escape('a$nb');
+	EXPECT_EQ_STRING('a\nb', res);
+	res := json_escape('a"b$nc');
+	EXPECT_EQ_STRING('a\"b\nc', res);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_find_key)
+	var
+		src: string[JSON_STRING_SIZE];
+		pos: dint;
+	end
+	{st}
+	// basic: key found at depth 1
+	src := '{"key":1}';
+	pos := json_find_key(src, 'key');
+	EXPECT_EQ_DINT(2, pos);
+	// nested: key inside nested object is not matched; outer key is
+	src := '{"outer":{"key":1},"key":2}';
+	pos := json_find_key(src, 'key');
+	EXPECT_EQ_DINT(20, pos);
+	// string value containing escaped key pattern is skipped
+	src := '{"ab":"\"key\":x","key":1}';
+	pos := json_find_key(src, 'key');
+	EXPECT_EQ_DINT(19, pos);
+	// not found returns 0
+	src := '{"other":1}';
+	pos := json_find_key(src, 'key');
+	EXPECT_EQ_DINT(0, pos);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_unescape)
+	var
+		res: string[JSON_STRING_SIZE];
+		ok: bool;
+	end
+	{st}
+	// --- Single escape sequences ---
+	res := json_unescape('\"');
+	EXPECT_EQ_STRING('"', res);
+	res := json_unescape('\\');
+	EXPECT_EQ_STRING('\', res);
+	res := json_unescape('\t');
+	EXPECT_EQ_STRING('$t', res);
+	res := json_unescape('\n');
+	EXPECT_EQ_STRING('$n', res);
+	res := json_unescape('\r');
+	EXPECT_EQ_STRING('$r', res);
+	res := json_unescape('\b');
+	EXPECT_EQ_STRING('$08', res);
+	res := json_unescape('\f');
+	EXPECT_EQ_STRING('$0c', res);
+	res := json_unescape('\x41');
+	EXPECT_EQ_STRING('A', res);
+	res := json_unescape('\u0041');
+	EXPECT_EQ_STRING('A', res);
+	res := json_unescape('\u000a');
+	EXPECT_EQ_STRING('$n', res);
+	res := json_unescape('\u0022');
+	EXPECT_EQ_STRING('"', res);
+	// --- Multiple characters ---
+	res := json_unescape('Hello');
+	EXPECT_EQ_STRING('Hello', res);
+	res := json_unescape('a\"b');
+	EXPECT_EQ_STRING('a"b', res);
+	res := json_unescape('a\tb');
+	EXPECT_EQ_STRING('a$tb', res);
+	res := json_unescape('a\nb');
+	EXPECT_EQ_STRING('a$nb', res);
+	res := json_unescape('a\"b\nc');
+	EXPECT_EQ_STRING('a"b$nc', res);
+	// --- Error cases: verify eno=false is returned ---
+	res := json_unescape(in:='\', eno=>ok);      // trailing backslash
+	EXPECT_FALSE(ok);
+	res := json_unescape(in:='\q', eno=>ok);     // unknown escape character
+	EXPECT_FALSE(ok);
+	res := json_unescape(in:='\x4', eno=>ok);    // \x: insufficient hex digits
+	EXPECT_FALSE(ok);
+	res := json_unescape(in:='\xGH', eno=>ok);   // \x: invalid hex digit
+	EXPECT_FALSE(ok);
+	res := json_unescape(in:='\u00A', eno=>ok);  // \u: insufficient hex digits
+	EXPECT_FALSE(ok);
+	res := json_unescape(in:='\u0080', eno=>ok); // \u: non-ASCII code (128)
+	EXPECT_FALSE(ok);
+	{end}
+END_TEST_S

@@ -1,0 +1,9 @@
+{
+    "type": "object",
+    "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "number" },
+        "count": { "type": "integer" },
+        "active": { "type": "boolean" }
+    }
+}
