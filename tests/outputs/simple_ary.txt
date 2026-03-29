@@ -123,29 +123,29 @@ function json_char_from_asciicharcode: string[8]
 (*{end}*)
 end_function
 
-function json_bytes_insert_str: dint
+function json_bytes_insert_text: dint
 	_DEFINE_ENENO_()
-	var_in_out json: array[*] of byte; end_var
-	var_input pos: dint; end_var
+	var_in_out dat: array[*] of byte; end_var
+	var_input index: dint; end_var
 	var_input str: string[JSON_STRING_SIZE]; end_var
 	var_temp
 		slen, wp, ci, code: dint;
 	end_var
 (*{st}*)
 	slen := len(str);
-	wp := pos;
+	wp := index;
 	ci := 0;
 	while ci < slen do
 		code := json_asciicharcode(in:=mid(str, 1, dint_to_uint(ci + 1)), eno=>eno);
 		if not eno then
-			json_bytes_insert_str := -1;
+			json_bytes_insert_text := -1;
 			return;
 		end_if;
-		json[wp] := dint_to_byte(code);
+		dat[wp] := dint_to_byte(code);
 		wp := wp + 1;
 		ci := ci + 1;
 	end_while;
-	json_bytes_insert_str := wp;
+	json_bytes_insert_text := wp;
 (*{end}*)
 end_function
 
@@ -214,44 +214,49 @@ end_function
 function json_bytes_find_key: dint
 	_DEFINE_ENENO_()
 	var_in_out dat: array[*] of byte; end_var
-	var_input key: string[JSON_STRING_SIZE]; end_var
+	var_in_out key: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint := -1; end_var
 	var_temp
-		ci, klen, klen_i, tmp_ci: dint;
-		depth: dint;
-		sv, kpat: string[JSON_STRING_SIZE];
+		ci, klen_i, tmp_ci: dint;
+		depth, klen: dint;
 		match: bool;
+		ei: dint;
 	end_var
 (*{st}*)
-	// Scan null-terminated byte array at nesting depth 1, skipping string literals.
-	// Returns the 0-based byte index of the value (after '"key":'), or returns -1 if not found.
-	kpat := concat('"', concat(key, '":'));
-	klen := len(kpat);
+	// Scan dat[start_index..end_index] at nesting depth 1, skipping string literals.
+	// Returns the 0-based byte index of the value (after '"key":'), or -1 if not found.
+	// end_index=-1 means scan to the end of dat.
+	if end_index < 0 then ei := upper_bound(dat, 1); else ei := end_index; end_if;
+	klen := upper_bound(key, 1) - lower_bound(key, 1) + 1;
 	depth := 0;
-	ci := 0;
-	while dat[ci] <> 0 do
+	ci := start_index;
+	while ci <= ei and dat[ci] <> 0 do
 		if dat[ci] = 34 then  // '"'
 			if depth = 1 then
-				sv := '';
-				tmp_ci := ci;
 				match := true;
+				tmp_ci := ci + 1;
 				klen_i := 0;
-				while klen_i < klen and match do
-					sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(dat[tmp_ci]), eno=>eno));
-					if not eno then match := false; eno := true; end_if;
+				while klen_i < klen and match and tmp_ci <= ei do
+					if dat[tmp_ci] <> key[klen_i] then match := false; end_if;
 					tmp_ci := tmp_ci + 1;
 					klen_i := klen_i + 1;
 				end_while;
-				if match and sv = kpat then
-					json_bytes_find_key := ci + klen;
+				if match and tmp_ci + 1 <= ei and dat[tmp_ci] = 34 and dat[tmp_ci + 1] = 58 then  // '"' and ':'
+					json_bytes_find_key := tmp_ci + 2;
 					return;
 				end_if;
 			end_if;
 			// skip string literal
 			ci := ci + 1;
-			while dat[ci] <> 34 do
-				if dat[ci] = 92 then ci := ci + 1; end_if;  // 92 = '\'
+			while ci <= ei and dat[ci] <> 34 do
+				if dat[ci] = 92 then
+					ci := ci + 1;
+					if ci > ei then json_bytes_find_key := -1; return; end_if;
+				end_if;
 				ci := ci + 1;
 			end_while;
+			if ci > ei then json_bytes_find_key := -1; return; end_if;
 		elsif dat[ci] = 123 or dat[ci] = 91 then  // '{' or '['
 			depth := depth + 1;
 		elsif dat[ci] = 125 or dat[ci] = 93 then  // '}' or ']'
@@ -260,6 +265,167 @@ function json_bytes_find_key: dint
 		ci := ci + 1;
 	end_while;
 	json_bytes_find_key := -1;
+(*{end}*)
+end_function
+
+function json_find_block
+	_DEFINE_ENENO_()
+	var_in_out dat: string[JSON_STRING_SIZE]; end_var
+	var_input key: string[JSON_STRING_SIZE]; end_var
+	var_input open_ch: string[2]; end_var
+	var_input close_ch: string[2]; end_var
+	var_in_out block: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		pos, qos, slen, depth: dint;
+		ch: string[2];
+	end_var
+(*{st}*)
+	// Find key at depth 1 in dat, then extract the following {..} or [..] block.
+	// Writes the block into block. Sets eno=false if key not found or brackets unmatched.
+	pos := json_find_key(dat:=dat, key:=key);
+	if pos = 0 then eno := false; return; end_if;
+	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	qos := pos;
+	slen := uint_to_dint(len(dat));
+	depth := 1;
+	while depth > 0 do
+		qos := qos + 1;
+		if qos > slen then eno := false; return; end_if;
+		ch := mid(dat, 1, dint_to_uint(qos));
+		if ch = '"' then
+			// skip string literal to avoid false bracket matches
+			qos := qos + 1;
+			while mid(dat, 1, dint_to_uint(qos)) <> '"' do
+				if mid(dat, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
+				qos := qos + 1;
+			end_while;
+		elsif ch = open_ch then depth := depth + 1;
+		elsif ch = close_ch then depth := depth - 1;
+		end_if;
+	end_while;
+	block := mid(dat, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
+(*{end}*)
+end_function
+
+function json_extract_scalar
+	_DEFINE_ENENO_()
+	var_in_out dat: string[JSON_STRING_SIZE]; end_var
+	var_input key: string[JSON_STRING_SIZE]; end_var
+	var_in_out sv: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		pos, qp, slen: dint;
+		tail: string[JSON_STRING_SIZE];
+	end_var
+(*{st}*)
+	// Find key at depth 1 in dat, then extract the scalar value (up to ',', '}', or ']').
+	// Writes the value into sv. Sets eno=false if key not found or no delimiter.
+	pos := json_find_key(dat:=dat, key:=key);
+	if pos = 0 then eno := false; return; end_if;
+	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	slen := uint_to_dint(len(dat));
+	tail := mid(dat, dint_to_uint(slen - pos + 1), dint_to_uint(pos));
+	qp := find(tail, ',');
+	if qp = 0 then qp := find(tail, '}'); end_if;
+	if qp = 0 then qp := find(tail, ']'); end_if;
+	if qp = 0 then eno := false; return; end_if;
+	sv := mid(dat, dint_to_uint(qp - 1), dint_to_uint(pos));
+(*{end}*)
+end_function
+
+function json_bytes_find_block
+	_DEFINE_ENENO_()
+	var_in_out dat: array[*] of byte; end_var
+	var_in_out key: array[*] of byte; end_var
+	var_input open_byte: byte; end_var
+	var_input close_byte: byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out block_start_index: dint; end_var
+	var_in_out block_end_index: dint; end_var
+	var_temp
+		raw_ci, raw_qos, raw_depth: dint;
+		dat_ub: dint;
+	end_var
+(*{st}*)
+	// Find key in byte array dat and set block_start_index/block_end_index
+	// to the inclusive range [open_byte..close_byte] within dat.
+	// open_byte/close_byte are the bracket bytes (e.g. 123/125 for {}).
+	// Sets eno=false if key not found or brackets unmatched.
+	raw_ci := json_bytes_find_key(dat:=dat, key:=key, start_index:=start_index, end_index:=end_index, eno=>eno);
+	if raw_ci = -1 then eno := false; return; end_if;
+	raw_qos := raw_ci;
+	raw_depth := 1;
+	dat_ub := upper_bound(dat, 1);
+	while raw_depth > 0 do
+		raw_qos := raw_qos + 1;
+		if raw_qos > dat_ub then eno := false; return; end_if;
+		if dat[raw_qos] = 34 then  // 34 = '"'
+			// skip string literal
+			raw_qos := raw_qos + 1;
+			while raw_qos <= dat_ub and dat[raw_qos] <> 34 do
+				if dat[raw_qos] = 92 then
+					raw_qos := raw_qos + 1;
+					if raw_qos > dat_ub then eno := false; return; end_if;
+				end_if;
+				raw_qos := raw_qos + 1;
+			end_while;
+			if raw_qos > dat_ub then eno := false; return; end_if;
+		elsif dat[raw_qos] = open_byte then raw_depth := raw_depth + 1;
+		elsif dat[raw_qos] = close_byte then raw_depth := raw_depth - 1;
+		end_if;
+	end_while;
+	block_start_index := raw_ci;
+	block_end_index := raw_qos;
+(*{end}*)
+end_function
+
+function json_bytes_extract_scalar
+	_DEFINE_ENENO_()
+	var_in_out dat: array[*] of byte; end_var
+	var_in_out key: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out sv: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		raw_ci: dint;
+		dat_ub: dint;
+	end_var
+(*{st}*)
+	// Find key in byte array dat, then extract the scalar value (up to ',', '}', ']', or NUL).
+	// Writes the value into sv. Sets eno=false if key not found.
+	raw_ci := json_bytes_find_key(dat:=dat, key:=key, start_index:=start_index, end_index:=end_index, eno=>eno);
+	if raw_ci = -1 then eno := false; return; end_if;
+	dat_ub := upper_bound(dat, 1);
+	sv := '';
+	while raw_ci <= dat_ub and dat[raw_ci] <> 44 and dat[raw_ci] <> 125 and dat[raw_ci] <> 93 and dat[raw_ci] <> 0 do
+		sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(dat[raw_ci]), eno=>eno));
+		if not eno then return; end_if;
+		raw_ci := raw_ci + 1;
+	end_while;
+	if raw_ci > dat_ub then eno := false; return; end_if;
+(*{end}*)
+end_function
+
+function json_bytes_to_str
+	_DEFINE_ENENO_()
+	var_in_out dat: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out sv: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		raw_ci: dint;
+	end_var
+(*{st}*)
+	// Convert dat[start_index..end_index] into a string.
+	// Sets eno=false if a byte cannot be converted.
+	if end_index > upper_bound(dat, 1) then eno := false; return; end_if;
+	sv := '';
+	raw_ci := start_index;
+	while raw_ci <= end_index do
+		sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(dat[raw_ci]), eno=>eno));
+		if not eno then return; end_if;
+		raw_ci := raw_ci + 1;
+	end_while;
 (*{end}*)
 end_function
 
@@ -348,241 +514,255 @@ function json_unescape: string[JSON_STRING_SIZE]
 (*{end}*)
 end_function
 	
-function SimpleAry_data_to_jsonstr
+function SimpleAry_iecdata_to_jsontext
 	_DEFINE_ENENO_()
 	var_in_out data: SimpleAry_t; end_var
-	var_in_out json: string[1024]; end_var
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_temp
-		sv: string[JSON_STRING_SIZE];
+		sv: string[256];
 	end_var
 (*{st}*)
-	json := '{';
-	json := concat(json, '"integers":');
-	json := concat(json, '[');
+	txt := '{';
+	txt := concat(txt, '"integers":');
+	txt := concat(txt, '[');
 	sv := dint_to_string(data.integers[0]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[1]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[2]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[3]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[4]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[5]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[6]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := dint_to_string(data.integers[7]);
-	json := concat(json, sv);
-	json := concat(json, ']');
-	json := concat(json, ',"floats":');
-	json := concat(json, '[');
+	txt := concat(txt, sv);
+	txt := concat(txt, ']');
+	txt := concat(txt, ',"floats":');
+	txt := concat(txt, '[');
 	sv := lreal_to_string(data.floats[0]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := lreal_to_string(data.floats[1]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := lreal_to_string(data.floats[2]);
-	json := concat(json, sv);
-	json := concat(json, ',');
+	txt := concat(txt, sv);
+	txt := concat(txt, ',');
 	sv := lreal_to_string(data.floats[3]);
-	json := concat(json, sv);
-	json := concat(json, ']');
-	json := concat(json, ',"strings":');
-	json := concat(json, '[');
-	json := concat(json, '"');
-	json := concat(json, json_escape(data.strings[0]));
-	json := concat(json, '"');
-	json := concat(json, ',');
-	json := concat(json, '"');
-	json := concat(json, json_escape(data.strings[1]));
-	json := concat(json, '"');
-	json := concat(json, ',');
-	json := concat(json, '"');
-	json := concat(json, json_escape(data.strings[2]));
-	json := concat(json, '"');
-	json := concat(json, ']');
-	json := concat(json, ',"booleans":');
-	json := concat(json, '[');
+	txt := concat(txt, sv);
+	txt := concat(txt, ']');
+	txt := concat(txt, ',"strings":');
+	txt := concat(txt, '[');
+	txt := concat(txt, '"');
+	txt := concat(txt, json_escape(data.strings[0]));
+	txt := concat(txt, '"');
+	txt := concat(txt, ',');
+	txt := concat(txt, '"');
+	txt := concat(txt, json_escape(data.strings[1]));
+	txt := concat(txt, '"');
+	txt := concat(txt, ',');
+	txt := concat(txt, '"');
+	txt := concat(txt, json_escape(data.strings[2]));
+	txt := concat(txt, '"');
+	txt := concat(txt, ']');
+	txt := concat(txt, ',"booleans":');
+	txt := concat(txt, '[');
 	if data.booleans[0] then
-		json := concat(json, 'true');
+		txt := concat(txt, 'true');
 	else
-		json := concat(json, 'false');
+		txt := concat(txt, 'false');
 	end_if;
-	json := concat(json, ',');
+	txt := concat(txt, ',');
 	if data.booleans[1] then
-		json := concat(json, 'true');
+		txt := concat(txt, 'true');
 	else
-		json := concat(json, 'false');
+		txt := concat(txt, 'false');
 	end_if;
-	json := concat(json, ',');
+	txt := concat(txt, ',');
 	if data.booleans[2] then
-		json := concat(json, 'true');
+		txt := concat(txt, 'true');
 	else
-		json := concat(json, 'false');
+		txt := concat(txt, 'false');
 	end_if;
-	json := concat(json, ',');
+	txt := concat(txt, ',');
 	if data.booleans[3] then
-		json := concat(json, 'true');
+		txt := concat(txt, 'true');
 	else
-		json := concat(json, 'false');
+		txt := concat(txt, 'false');
 	end_if;
-	json := concat(json, ',');
+	txt := concat(txt, ',');
 	if data.booleans[4] then
-		json := concat(json, 'true');
+		txt := concat(txt, 'true');
 	else
-		json := concat(json, 'false');
+		txt := concat(txt, 'false');
 	end_if;
-	json := concat(json, ']');
-	json := concat(json, '}');
+	txt := concat(txt, ']');
+	txt := concat(txt, '}');
 (*{end}*)
 end_function
-function SimpleAry_data_to_jsonbytes
+function SimpleAry_iecdata_to_jsonbytes: dint
 	_DEFINE_ENENO_()
 	var_in_out data: SimpleAry_t; end_var
-	var_in_out json: array[*] of byte; end_var
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint := -1; end_var
 	var_temp
-		sv: string[JSON_STRING_SIZE];
-		raw_ci: dint;
+		sv: string[256];
+		raw_ci, si: dint;
 	end_var
 (*{st}*)
-	raw_ci := 0;
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"integers":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '[');
+	if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;
+	raw_ci := si;
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"integers":');
+	bytes[raw_ci] := byte#91;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[0]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[1]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[2]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[3]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[4]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[5]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[6]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := dint_to_string(data.integers[7]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ']');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"floats":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '[');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#93;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"floats":');
+	bytes[raw_ci] := byte#91;
+	raw_ci := raw_ci + 1;
 	sv := lreal_to_string(data.floats[0]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := lreal_to_string(data.floats[1]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := lreal_to_string(data.floats[2]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	sv := lreal_to_string(data.floats[3]);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ']');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"strings":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '[');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, json_escape(data.strings[0]));
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, json_escape(data.strings[1]));
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, json_escape(data.strings[2]));
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ']');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"booleans":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '[');
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#93;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"strings":');
+	bytes[raw_ci] := byte#91;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=json_escape(data.strings[0]));
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=json_escape(data.strings[1]));
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=json_escape(data.strings[2]));
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#93;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"booleans":');
+	bytes[raw_ci] := byte#91;
+	raw_ci := raw_ci + 1;
 	if data.booleans[0] then
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'true');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='true');
 	else
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'false');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='false');
 	end_if;
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	if data.booleans[1] then
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'true');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='true');
 	else
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'false');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='false');
 	end_if;
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	if data.booleans[2] then
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'true');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='true');
 	else
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'false');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='false');
 	end_if;
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	if data.booleans[3] then
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'true');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='true');
 	else
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'false');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='false');
 	end_if;
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
 	if data.booleans[4] then
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'true');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='true');
 	else
-		raw_ci := json_bytes_insert_str(json, raw_ci, 'false');
+		raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='false');
 	end_if;
-	raw_ci := json_bytes_insert_str(json, raw_ci, ']');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	json[raw_ci] := 0;
+	bytes[raw_ci] := byte#93;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := 0;
+	SimpleAry_iecdata_to_jsonbytes := raw_ci - si;
 (*{end}*)
 end_function
-function SimpleAry_jsonstr_to_data
+function SimpleAry_jsontext_to_iecdata
 	_DEFINE_ENENO_()
-	var_in_out json: string[1024]; end_var
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_in_out data: SimpleAry_t; end_var
 	var_temp
 		pos, qos, qp: dint;
-		pos1, pos2: dint;
-		jblk1: string[1024];
+		pos1: dint;
+		jblk1: string[JSON_STRING_SIZE];
 		jblk1_len: dint;
-		jblk1_sub: string[1024];
-		jblk2: string[1024];
-		jblk2_len: dint;
-		jblk2_sub: string[1024];
-		depth: dint;
+		jblk1_sub: string[JSON_STRING_SIZE];
 	end_var
 (*{st}*)
 	// integers: array
-	pos := json_find_key(json, 'integers');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 11;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(json, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(json, 1, dint_to_uint(qos)) <> '"' do
-				if mid(json, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(json, 1, dint_to_uint(qos)) = '[' then depth := depth + 1;
-		elsif mid(json, 1, dint_to_uint(qos)) = ']' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk1 := mid(json, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
+	json_find_block(dat:=txt, key:='integers', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
 	jblk1_len := len(jblk1);
 	pos1 := 2;
 	// [0]
@@ -634,25 +814,8 @@ function SimpleAry_jsonstr_to_data
 	data.integers[7] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
 	pos1 := pos1 + qp;
 	// floats: array
-	pos := json_find_key(json, 'floats');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 9;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(json, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(json, 1, dint_to_uint(qos)) <> '"' do
-				if mid(json, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(json, 1, dint_to_uint(qos)) = '[' then depth := depth + 1;
-		elsif mid(json, 1, dint_to_uint(qos)) = ']' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk1 := mid(json, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
+	json_find_block(dat:=txt, key:='floats', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
 	jblk1_len := len(jblk1);
 	pos1 := 2;
 	// [0]
@@ -680,25 +843,8 @@ function SimpleAry_jsonstr_to_data
 	data.floats[3] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
 	pos1 := pos1 + qp;
 	// strings: array
-	pos := json_find_key(json, 'strings');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 10;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(json, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(json, 1, dint_to_uint(qos)) <> '"' do
-				if mid(json, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(json, 1, dint_to_uint(qos)) = '[' then depth := depth + 1;
-		elsif mid(json, 1, dint_to_uint(qos)) = ']' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk1 := mid(json, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
+	json_find_block(dat:=txt, key:='strings', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
 	jblk1_len := len(jblk1);
 	pos1 := 2;
 	// [0]
@@ -741,25 +887,8 @@ function SimpleAry_jsonstr_to_data
 	if not eno then return; end_if;
 	pos1 := qos + 2;
 	// booleans: array
-	pos := json_find_key(json, 'booleans');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 11;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(json, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(json, 1, dint_to_uint(qos)) <> '"' do
-				if mid(json, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(json, 1, dint_to_uint(qos)) = '[' then depth := depth + 1;
-		elsif mid(json, 1, dint_to_uint(qos)) = ']' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk1 := mid(json, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
+	json_find_block(dat:=txt, key:='booleans', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
 	jblk1_len := len(jblk1);
 	pos1 := 2;
 	// [0]
@@ -794,268 +923,252 @@ function SimpleAry_jsonstr_to_data
 	pos1 := pos1 + qp;
 (*{end}*)
 end_function
-function SimpleAry_jsonbytes_to_data
+function SimpleAry_jsonbytes_to_iecdata
 	_DEFINE_ENENO_()
-	var_in_out json: array[*] of byte; end_var
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint := -1; end_var
+	var_input end_index: dint := -1; end_var
 	var_in_out data: SimpleAry_t; end_var
 	var_temp
-		sv: string[JSON_STRING_SIZE];
-		raw_ci, raw_qos, raw_depth: dint;
-		pos, qos, qp: dint;
-		pos1, pos2: dint;
-		jblk1: string[1024];
-		jblk1_len: dint;
-		jblk1_sub: string[1024];
-		jblk2: string[1024];
-		jblk2_len: dint;
-		jblk2_sub: string[1024];
-		depth: dint;
+		si, ei: dint;
+		key_integers: array[0..7] of byte := [byte#105, byte#110, byte#116, byte#101, byte#103, byte#101, byte#114, byte#115];
+		key_floats: array[0..5] of byte := [byte#102, byte#108, byte#111, byte#97, byte#116, byte#115];
+		key_strings: array[0..6] of byte := [byte#115, byte#116, byte#114, byte#105, byte#110, byte#103, byte#115];
+		key_booleans: array[0..7] of byte := [byte#98, byte#111, byte#111, byte#108, byte#101, byte#97, byte#110, byte#115];
+		sv: string[256];
+		jblk1_bsi, jblk1_bei: dint;
+		qos: dint;
+		pos1: dint;
 	end_var
 (*{st}*)
+	if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;
+	if end_index < 0 then ei := upper_bound(bytes, 1); else ei := end_index; end_if;
 	// integers: array
-	raw_ci := json_bytes_find_key(json, 'integers');
-	if raw_ci = -1 then eno := false; return; end_if;
-	raw_qos := raw_ci;
-	raw_depth := 1;
-	while raw_depth > 0 do
-		raw_qos := raw_qos + 1;
-		if json[raw_qos] = 34 then
-			// skip string literal
-			raw_qos := raw_qos + 1;
-			while json[raw_qos] <> 34 do
-				if json[raw_qos] = 92 then raw_qos := raw_qos + 1; end_if;
-				raw_qos := raw_qos + 1;
-			end_while;
-		elsif json[raw_qos] = 91 then raw_depth := raw_depth + 1;
-		elsif json[raw_qos] = 93 then raw_depth := raw_depth - 1;
-		end_if;
-	end_while;
-	jblk1 := '';
-	while raw_ci <= raw_qos do
-		jblk1 := concat(jblk1, json_char_from_asciicharcode(code:=byte_to_dint(json[raw_ci]), eno=>eno));
-		if not eno then return; end_if;
-		raw_ci := raw_ci + 1;
-	end_while;
-	jblk1_len := len(jblk1);
-	pos1 := 2;
+	json_bytes_find_block(dat:=bytes, key:=key_integers, open_byte:=byte#91, close_byte:=byte#93, start_index:=si, end_index:=ei, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := jblk1_bsi + 1;  // skip '['
 	// [0]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[0] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[0] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [1]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[1] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[1] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [2]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[2] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[2] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [3]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[3] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[3] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [4]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[4] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[4] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [5]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[5] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[5] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [6]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[6] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[6] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// [7]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.integers[7] := string_to_dint(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.integers[7] := string_to_dint(sv);
+	pos1 := qos + 1;
 	// floats: array
-	raw_ci := json_bytes_find_key(json, 'floats');
-	if raw_ci = -1 then eno := false; return; end_if;
-	raw_qos := raw_ci;
-	raw_depth := 1;
-	while raw_depth > 0 do
-		raw_qos := raw_qos + 1;
-		if json[raw_qos] = 34 then
-			// skip string literal
-			raw_qos := raw_qos + 1;
-			while json[raw_qos] <> 34 do
-				if json[raw_qos] = 92 then raw_qos := raw_qos + 1; end_if;
-				raw_qos := raw_qos + 1;
-			end_while;
-		elsif json[raw_qos] = 91 then raw_depth := raw_depth + 1;
-		elsif json[raw_qos] = 93 then raw_depth := raw_depth - 1;
-		end_if;
-	end_while;
-	jblk1 := '';
-	while raw_ci <= raw_qos do
-		jblk1 := concat(jblk1, json_char_from_asciicharcode(code:=byte_to_dint(json[raw_ci]), eno=>eno));
-		if not eno then return; end_if;
-		raw_ci := raw_ci + 1;
-	end_while;
-	jblk1_len := len(jblk1);
-	pos1 := 2;
+	json_bytes_find_block(dat:=bytes, key:=key_floats, open_byte:=byte#91, close_byte:=byte#93, start_index:=si, end_index:=ei, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := jblk1_bsi + 1;  // skip '['
 	// [0]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[0] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.floats[0] := string_to_lreal(sv);
+	pos1 := qos + 1;
 	// [1]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[1] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.floats[1] := string_to_lreal(sv);
+	pos1 := qos + 1;
 	// [2]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[2] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.floats[2] := string_to_lreal(sv);
+	pos1 := qos + 1;
 	// [3]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[3] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
-	pos1 := pos1 + qp;
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.floats[3] := string_to_lreal(sv);
+	pos1 := qos + 1;
 	// strings: array
-	raw_ci := json_bytes_find_key(json, 'strings');
-	if raw_ci = -1 then eno := false; return; end_if;
-	raw_qos := raw_ci;
-	raw_depth := 1;
-	while raw_depth > 0 do
-		raw_qos := raw_qos + 1;
-		if json[raw_qos] = 34 then
-			// skip string literal
-			raw_qos := raw_qos + 1;
-			while json[raw_qos] <> 34 do
-				if json[raw_qos] = 92 then raw_qos := raw_qos + 1; end_if;
-				raw_qos := raw_qos + 1;
-			end_while;
-		elsif json[raw_qos] = 91 then raw_depth := raw_depth + 1;
-		elsif json[raw_qos] = 93 then raw_depth := raw_depth - 1;
-		end_if;
-	end_while;
-	jblk1 := '';
-	while raw_ci <= raw_qos do
-		jblk1 := concat(jblk1, json_char_from_asciicharcode(code:=byte_to_dint(json[raw_ci]), eno=>eno));
-		if not eno then return; end_if;
-		raw_ci := raw_ci + 1;
-	end_while;
-	jblk1_len := len(jblk1);
-	pos1 := 2;
+	json_bytes_find_block(dat:=bytes, key:=key_strings, open_byte:=byte#91, close_byte:=byte#93, start_index:=si, end_index:=ei, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := jblk1_bsi + 1;  // skip '['
 	// [0]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	pos1 := find(jblk1_sub, '"') + pos1;
+	pos1 := pos1 + 1;  // skip opening '"'
+	if pos1 > jblk1_bei then eno := false; return; end_if;
 	qos := pos1;
-	while qos <= jblk1_len do
-		if mid(jblk1, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
+	while qos <= jblk1_bei and bytes[qos] <> 34 do  // 34 = '"'
+		if bytes[qos] = 92 then
+			qos := qos + 1;
+			if qos > jblk1_bei then eno := false; return; end_if;
 		end_if;
+		qos := qos + 1;
 	end_while;
-	data.strings[0] := json_unescape(in:=mid(jblk1, dint_to_uint(qos - pos1), dint_to_uint(pos1)), eno=>eno);
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	pos1 := qos + 2;
+	data.strings[0] := json_unescape(in:=sv, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := qos + 2;  // skip '"' and ','
 	// [1]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	pos1 := find(jblk1_sub, '"') + pos1;
+	pos1 := pos1 + 1;  // skip opening '"'
+	if pos1 > jblk1_bei then eno := false; return; end_if;
 	qos := pos1;
-	while qos <= jblk1_len do
-		if mid(jblk1, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
+	while qos <= jblk1_bei and bytes[qos] <> 34 do  // 34 = '"'
+		if bytes[qos] = 92 then
+			qos := qos + 1;
+			if qos > jblk1_bei then eno := false; return; end_if;
 		end_if;
+		qos := qos + 1;
 	end_while;
-	data.strings[1] := json_unescape(in:=mid(jblk1, dint_to_uint(qos - pos1), dint_to_uint(pos1)), eno=>eno);
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	pos1 := qos + 2;
+	data.strings[1] := json_unescape(in:=sv, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := qos + 2;  // skip '"' and ','
 	// [2]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	pos1 := find(jblk1_sub, '"') + pos1;
+	pos1 := pos1 + 1;  // skip opening '"'
+	if pos1 > jblk1_bei then eno := false; return; end_if;
 	qos := pos1;
-	while qos <= jblk1_len do
-		if mid(jblk1, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
+	while qos <= jblk1_bei and bytes[qos] <> 34 do  // 34 = '"'
+		if bytes[qos] = 92 then
+			qos := qos + 1;
+			if qos > jblk1_bei then eno := false; return; end_if;
 		end_if;
+		qos := qos + 1;
 	end_while;
-	data.strings[2] := json_unescape(in:=mid(jblk1, dint_to_uint(qos - pos1), dint_to_uint(pos1)), eno=>eno);
+	if qos > jblk1_bei then eno := false; return; end_if;
+	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	pos1 := qos + 2;
+	data.strings[2] := json_unescape(in:=sv, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := qos + 2;  // skip '"' and ','
 	// booleans: array
-	raw_ci := json_bytes_find_key(json, 'booleans');
-	if raw_ci = -1 then eno := false; return; end_if;
-	raw_qos := raw_ci;
-	raw_depth := 1;
-	while raw_depth > 0 do
-		raw_qos := raw_qos + 1;
-		if json[raw_qos] = 34 then
-			// skip string literal
-			raw_qos := raw_qos + 1;
-			while json[raw_qos] <> 34 do
-				if json[raw_qos] = 92 then raw_qos := raw_qos + 1; end_if;
-				raw_qos := raw_qos + 1;
-			end_while;
-		elsif json[raw_qos] = 91 then raw_depth := raw_depth + 1;
-		elsif json[raw_qos] = 93 then raw_depth := raw_depth - 1;
-		end_if;
-	end_while;
-	jblk1 := '';
-	while raw_ci <= raw_qos do
-		jblk1 := concat(jblk1, json_char_from_asciicharcode(code:=byte_to_dint(json[raw_ci]), eno=>eno));
-		if not eno then return; end_if;
-		raw_ci := raw_ci + 1;
-	end_while;
-	jblk1_len := len(jblk1);
-	pos1 := 2;
+	json_bytes_find_block(dat:=bytes, key:=key_booleans, open_byte:=byte#91, close_byte:=byte#93, start_index:=si, end_index:=ei, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := jblk1_bsi + 1;  // skip '['
 	// [0]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.booleans[0] := mid(jblk1, 4, dint_to_uint(pos1)) = 'true';
-	pos1 := pos1 + qp;
+	data.booleans[0] := bytes[pos1] = byte#116;  // 116 = 't'
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	pos1 := qos + 1;
 	// [1]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.booleans[1] := mid(jblk1, 4, dint_to_uint(pos1)) = 'true';
-	pos1 := pos1 + qp;
+	data.booleans[1] := bytes[pos1] = byte#116;  // 116 = 't'
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	pos1 := qos + 1;
 	// [2]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.booleans[2] := mid(jblk1, 4, dint_to_uint(pos1)) = 'true';
-	pos1 := pos1 + qp;
+	data.booleans[2] := bytes[pos1] = byte#116;  // 116 = 't'
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	pos1 := qos + 1;
 	// [3]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.booleans[3] := mid(jblk1, 4, dint_to_uint(pos1)) = 'true';
-	pos1 := pos1 + qp;
+	data.booleans[3] := bytes[pos1] = byte#116;  // 116 = 't'
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	pos1 := qos + 1;
 	// [4]
-	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
-	qp := find(jblk1_sub, ',');
-	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.booleans[4] := mid(jblk1, 4, dint_to_uint(pos1)) = 'true';
-	pos1 := pos1 + qp;
+	data.booleans[4] := bytes[pos1] = byte#116;  // 116 = 't'
+	qos := pos1;
+	while qos <= jblk1_bei and bytes[qos] <> 44 and bytes[qos] <> 93 do  // 44 = ',', 93 = ']'
+		qos := qos + 1;
+	end_while;
+	if qos > jblk1_bei then eno := false; return; end_if;
+	pos1 := qos + 1;
 (*{end}*)
 end_function

@@ -37,6 +37,7 @@ class TypeModel:
     root: StructType      # root STRUCT
     all_structs: list     # all STRUCTs in output order (leaf-first)
     has_string: bool      # whether json_escape/unescape need to be generated
+    string_type: str      # IEC string type for string fields (e.g. 'string[256]')
 
 
 def has_string_type(t: AnyType) -> bool:

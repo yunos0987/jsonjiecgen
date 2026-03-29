@@ -28,7 +28,7 @@ With testing (--test):
 
 - JSON データまたは JSON Schema を入力として、IEC 61131-3 STプログラムコードを生成
 - 入力の構造に特化した変換関数を生成（文字列版・バイト列版）
-- ネストしたオブジェクト・配列に対応
+- ネストしたオブジェクト・配列・多次元配列に対応
 - jiecunit 対応の単体テストファイルを `--test` で同時生成
 - 外部ライブラリへの依存なし。生成ファイル単体で完結
 - 型名・文字列型・整数型・実数型・論理型などをオプションで指定可能
@@ -68,7 +68,7 @@ python src/main.py <input.json> [オプション]
 | `--integer-type TYPE` | `dint` | JSON 整数に対応する IEC 整数型 |
 | `--number-type TYPE` | `lreal` | JSON 小数に対応する IEC 実数型 |
 | `--boolean-type TYPE` | `bool` | JSON 論理値に対応する IEC 型 |
-| `--json-string-size N` | `1024` | JSON 文字列バッファサイズ。jiecc マクロ名も指定可 |
+| `--json-string-size N` | `JSON_STRING_SIZE` | JSON 文字列バッファサイズ。jiecc マクロ名も指定可 |
 | `--test FILE` | — | jiecunit テストファイルの出力先 |
 
 > **スキーマ自動検出**: ファイル名に `schema` が含まれる場合、`--schema` を省略しても JSON Schema として処理されます。
@@ -107,13 +107,26 @@ type
     end_struct;
 end_type
 
-function JsonRoot_data_to_jsonstr
+function JsonRoot_iecdata_to_jsontext
     var_in_out data: JsonRoot_t; end_var
-    var_in_out json: string[1024]; end_var
+    var_in_out txt: string[JSON_STRING_SIZE]; end_var
     ...
 
-function JsonRoot_jsonstr_to_data
-    var_in_out json: string[1024]; end_var
+function JsonRoot_jsontext_to_iecdata
+    var_in_out txt: string[JSON_STRING_SIZE]; end_var
+    var_in_out data: JsonRoot_t; end_var
+    ...
+
+function JsonRoot_iecdata_to_jsonbytes: dint
+    var_in_out data: JsonRoot_t; end_var
+    var_in_out bytes: array[*] of byte; end_var
+    var_input start_index: dint := -1; end_var
+    ...
+
+function JsonRoot_jsonbytes_to_iecdata
+    var_in_out bytes: array[*] of byte; end_var
+    var_input start_index: dint := -1; end_var
+    var_input end_index: dint := -1; end_var
     var_in_out data: JsonRoot_t; end_var
     ...
 ```
@@ -135,7 +148,7 @@ python src/main.py jsons/samples/object.json -o output.txt
 }
 ```
 
-ネストしたオブジェクトは `JsonRoot_pos_t` のように名前が拡張されて型定義されます。型定義はリーフから順に出力されます。
+ネストしたオブジェクトは `JsonRoot_pos_t` のように名前が拡張されて型定義されます。型定義はリーフから順に出力されます。サブオブジェクト用の内部変換関数には `private_` プレフィックスが付きます。
 
 ### 多次元配列
 
@@ -165,7 +178,7 @@ python src/main.py jsons/schema_samples/simple_schema.json -o output.txt
 ```
 
 ```json
-// jsons/samples/simple_schema.json
+// jsons/schema_samples/simple_schema.json
 {
     "type": "object",
     "properties": {
@@ -190,7 +203,7 @@ python src/main.py jsons/samples/simple.json \
 ```
 
 `--test` を指定すると、生成コードに対応する jiecunit テストスイートを別ファイルに出力します。
-テストには `TEST_S(test_JsonRoot_jsonstr_to_data)` 等、入力値に基づくアサーションが含まれます。
+テストには `TEST_S(test_JsonRoot_jsontext_to_iecdata)` 等、入力値に基づくアサーションが含まれます。
 
 ### オプション指定例
 
@@ -223,19 +236,39 @@ python src/main.py jsons/samples/simple.json --string-type string
 | `json_char_from_asciicharcode` | ASCII コードから文字へ変換 |
 | `json_asciicharcode` | 文字から ASCII コードへ変換 |
 | `json_find_key` | JSON 文字列からキーの位置を検索 |
+| `json_find_block` | JSON 文字列からブロック（`{}`・`[]`）を抽出 |
+| `json_extract_scalar` | JSON 文字列からスカラー値を抽出 |
 | `json_bytes_find_key` | JSON バイト列からキーの位置を検索 |
-| `json_bytes_insert_str` | バイト列バッファに文字列を書き込む |
+| `json_bytes_find_block` | JSON バイト列からブロックを抽出 |
+| `json_bytes_extract_scalar` | JSON バイト列からスカラー値を抽出 |
+| `json_bytes_insert_text` | バイト列バッファに文字列を書き込む |
+| `json_bytes_to_str` | バイト列の範囲を文字列へ変換 |
 
 ### データ変換関数（`--root-name` で名前が変わる）
 
 | 関数 | 説明 |
 |---|---|
-| `JsonRoot_data_to_jsonstr` | 構造体 → JSON 文字列 `string[N]` |
-| `JsonRoot_jsonstr_to_data` | JSON 文字列 → 構造体 |
-| `JsonRoot_data_to_jsonbytes` | 構造体 → JSON バイト列 `array[*] of byte` |
-| `JsonRoot_jsonbytes_to_data` | JSON バイト列 → 構造体 |
+| `JsonRoot_iecdata_to_jsontext` | 構造体 → JSON 文字列 `string[N]` |
+| `JsonRoot_jsontext_to_iecdata` | JSON 文字列 → 構造体 |
+| `JsonRoot_iecdata_to_jsonbytes: dint` | 構造体 → JSON バイト列 `array[*] of byte`。戻り値は書き込みバイト数 |
+| `JsonRoot_jsonbytes_to_iecdata` | JSON バイト列 → 構造体 |
 
-`jsonstr_to_data` / `jsonbytes_to_data` はキーが見つからない・値の区切り文字がないなど不正データを検出すると `eno = false` を返します。
+`jsontext_to_iecdata` / `jsonbytes_to_iecdata` はキーが見つからない・値の区切り文字がないなど不正データを検出すると `eno = false` を返します。
+
+ネストしたオブジェクトや構造体配列の内部処理用に `private_JsonRoot_xxx_t_jsontext_to_iecdata` / `private_JsonRoot_xxx_t_jsonbytes_to_iecdata` が生成されますが、外部からの直接呼び出しは想定していません。
+
+### バイト列関数のパラメータ
+
+`iecdata_to_jsonbytes` と `jsonbytes_to_iecdata` は開始・終了インデックスをオプションで指定できます。
+
+```
+JsonRoot_iecdata_to_jsonbytes(data:=data, bytes:=buf, start_index:=offset);
+    // start_index = -1（デフォルト）: lower_bound(bytes, 1) から書き込み開始
+
+JsonRoot_jsonbytes_to_iecdata(bytes:=buf, start_index:=si, end_index:=ei, data:=data);
+    // start_index = -1（デフォルト）: lower_bound(bytes, 1) から読み込み開始
+    // end_index   = -1（デフォルト）: upper_bound(bytes, 1) まで読み込み
+```
 
 ## 型マッピング仕様
 
@@ -297,7 +330,7 @@ jsonjiecgen/
     │   ├── struct_ary_3.txt / test_struct_ary_3.txt
     │   └── multi_ary_struct.txt / test_multi_ary_struct.txt
     ├── test_analyzer.py
-    ├── jiecunittest_generator.py
+    ├── test_generator.py
     ├── test_jiecunittest_generator.py
     └── test_main.py
 ```
@@ -310,7 +343,7 @@ python -m pytest tests/ -v
 
 # テストファイル別に実行
 python -m pytest tests/test_analyzer.py -v
-python -m pytest tests/test_jiecunittest_generator.py -v
+python -m pytest tests/test_generator.py -v
 python -m pytest tests/test_jiecunittest_generator.py -v
 python -m pytest tests/test_main.py -v
 ```
@@ -323,8 +356,8 @@ python -m pytest tests/test_main.py -v
 for entry in \
   "simple --root-name Simple" \
   "various --root-name Various" \
-  "simple_schema --root-name SimpleSchema" \
-  "various_schema --root-name VariousSchema" \
+  "simple_schema --schema --root-name SimpleSchema" \
+  "various_schema --schema --root-name VariousSchema" \
   "nested_obj_3 --root-name NestedObj3" \
   "multiple_ary_3 --root-name MultipleAry3" \
   "simple_ary --root-name SimpleAry" \
@@ -345,7 +378,59 @@ done
 
 ## 制約・注意事項
 
+### コード生成時
+
 - 入力 JSON のトップレベルはオブジェクト（`{}`）である必要があります
 - JSON Schema モードではトップレベルが `"type": "object"` である必要があります
 - JSON Schema の配列型には `maxItems` の指定が必須です
 - 出力ファイルのエンコーディングは UTF-8（BOM なし）、改行コードは LF です
+
+### PLC 実行時
+
+#### JSON_STRING_SIZE マクロ
+
+生成コードは `JSON_STRING_SIZE` マクロを文字列バッファサイズとして使用します。未定義の場合はデフォルト値 `1024` が自動で定義されます。プロジェクトに合わせて jiecc コンパイルオプションや上位インクルードファイルで事前定義してください。
+
+```
+(* 例: コンパイル時オプション -D で定義 *)
+jiecc output.txt -DJSON_STRING_SIZE=4096 ...
+```
+
+`--json-string-size` オプションで指定した値はコンパイル時に `JSON_STRING_SIZE` の代わりに直接埋め込まれます。
+
+#### テキスト版（jsontext）の文字列長
+
+`iecdata_to_jsontext` の出力と `jsontext_to_iecdata` の入力はいずれも `string[JSON_STRING_SIZE]` 型です。生成される JSON 文字列がこのサイズを超えると PLC の `concat` により暗黙に切り詰められ、`jsontext_to_iecdata` は不正 JSON として `eno = false` を返します。入力 JSON が大きい場合は `JSON_STRING_SIZE` を十分大きく設定するか、バイト列版の使用を検討してください。
+
+#### バイト列版（jsonbytes）のバッファサイズ
+
+`iecdata_to_jsonbytes` と `jsonbytes_to_iecdata` の `bytes` パラメータは呼び出し側で確保した配列を渡します。`iecdata_to_jsonbytes` は配列境界チェックを行いません。バッファが不足すると配列外アクセスが発生します。`bytes` 配列は生成される JSON のバイト数より十分大きいサイズを確保してください。
+
+`iecdata_to_jsonbytes` は書き込み完了後にヌルバイト（`0x00`）を末尾に追加し、書き込みバイト数（ヌル終端を除く）を戻り値として返します。
+
+```
+(* 戻り値を使った使用例 *)
+written := JsonRoot_iecdata_to_jsonbytes(data:=data, bytes:=buf, start_index:=-1);
+(* buf[lower_bound(buf,1) .. lower_bound(buf,1)+written-1] に JSON が格納される *)
+(* buf[lower_bound(buf,1)+written] = 0x00 (ヌル終端) *)
+```
+
+#### eno パラメータ
+
+`jsontext_to_iecdata` / `jsonbytes_to_iecdata` は以下の場合に `eno = false` を返して処理を中断します。
+
+- 指定キーが JSON 内に見つからない
+- 値の区切り文字（`,` `}` `]`）が見つからない
+- ブラケットの対応が取れていない
+- バイト列のインデックスが範囲外になった
+- 文字コード変換に失敗した（非 ASCII 文字など）
+
+呼び出し側では `eno` の値を確認し、`false` の場合はデータを使用しないようにしてください。
+
+#### 入力 JSON の書式
+
+PLC 実行時に渡す JSON データには余分な空白・タブ・改行を含めないでください。コンパクト形式（`{"key":value}`）のみ対応しています。
+
+#### string 型のサイズ指定
+
+jiecc の `string[N]` の `N` はヌル文字（NIL）を含むバイト数です。例えば最大 10 文字のフィールドを扱うには `string[11]` と指定します。`--string-type string[N]` で指定する `N` もこの規則に従ってください。

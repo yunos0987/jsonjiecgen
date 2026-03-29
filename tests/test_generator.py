@@ -57,100 +57,105 @@ class TestJsonHelpers:
         assert "ch = '$t'  then result := concat(result, '\\t')" in out
         assert "ch = '$n'  then result := concat(result, '\\n')" in out
 
-    def test_sv_uses_json_string_size(self):
-        out = gen({'name': 'abc'})
-        assert 'sv: string[JSON_STRING_SIZE];' in out
-
-    def test_sv_uses_json_string_size_when_no_string_field(self):
+    def test_sv_in_generated_function_uses_string_type(self):
+        # sv declared in generated functions uses the string_type option (default string[256])
         out = gen({'x': 1})
-        assert 'sv: string[JSON_STRING_SIZE];' in out
+        fn = out.split('function JsonRoot_iecdata_to_jsontext')[1].split('end_function')[0]
+        assert 'sv: string[256];' in fn
+
+    def test_sv_in_generated_function_uses_custom_string_type(self):
+        # sv declared in generated functions uses the custom string_type when specified
+        out = gen({'x': 1}, string_type='string[128]')
+        fn = out.split('function JsonRoot_iecdata_to_jsontext')[1].split('end_function')[0]
+        assert 'sv: string[128];' in fn
 
 
 class TestRawjsonFunctions:
     def test_data_to_jsonbytes_always_generated(self):
-        assert 'function JsonRoot_data_to_jsonbytes' in gen({'x': 1})
+        assert 'function JsonRoot_iecdata_to_jsonbytes' in gen({'x': 1})
 
     def test_jsonbytes_to_data_always_generated(self):
-        assert 'function JsonRoot_jsonbytes_to_data' in gen({'x': 1})
+        assert 'function JsonRoot_jsonbytes_to_iecdata' in gen({'x': 1})
 
     def test_data_to_jsonbytes_no_intermediate_string(self):
         out = gen({'x': 1})
-        assert 'JsonRoot_data_to_jsonstr(data, json);' not in out
-        assert 'json: string[' not in out.split('function JsonRoot_data_to_jsonbytes')[1].split('end_function')[0]
+        assert 'JsonRoot_iecdata_to_jsontext(data, txt);' not in out
+        assert 'json: string[' not in out.split('function JsonRoot_iecdata_to_jsonbytes')[1].split('end_function')[0]
 
-    def test_data_to_jsonbytes_uses_json_bytes_insert_str(self):
-        assert 'json_bytes_insert_str(json,' in gen({'x': 1})
+    def test_data_to_jsonbytes_uses_json_bytes_insert_text(self):
+        assert 'json_bytes_insert_text(dat:=bytes,' in gen({'x': 1})
 
     def test_data_to_jsonbytes_null_terminates(self):
-        assert 'json[raw_ci] := 0' in gen({'x': 1})
+        assert 'bytes[raw_ci] := 0' in gen({'x': 1})
 
     def test_data_to_jsonbytes_numeric_field(self):
         out = gen({'x': 1})
-        assert "raw_ci := json_bytes_insert_str(json, raw_ci, sv);" in out
+        assert "raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);" in out
 
     def test_data_to_jsonbytes_bool_field(self):
         out = gen({'flag': True})
-        assert "raw_ci := json_bytes_insert_str(json, raw_ci, 'true');" in out
-        assert "raw_ci := json_bytes_insert_str(json, raw_ci, 'false');" in out
+        assert "raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='true');" in out
+        assert "raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='false');" in out
 
     def test_data_to_jsonbytes_string_field(self):
         out = gen({'name': 'abc'})
         assert 'json_escape(data.name)' in out
 
-    def test_jsonbytes_to_data_uses_char_from_code(self):
-        fn = gen({'x': 1}).split('function JsonRoot_jsonbytes_to_data')[1].split('end_function')[0]
-        assert 'json_char_from_asciicharcode(code:=byte_to_dint(json[raw_ci]), eno=>eno)' in fn
+    def test_jsonbytes_to_data_uses_bytes_extract_scalar(self):
+        fn = gen({'x': 1}).split('function JsonRoot_jsonbytes_to_iecdata')[1].split('end_function')[0]
+        assert 'json_bytes_extract_scalar(dat:=bytes, key:=key_x, start_index:=si, end_index:=ei, sv:=sv, eno=>eno)' in fn
 
     def test_jsonbytes_to_data_no_intermediate_string(self):
-        fn = gen({'x': 1}).split('function JsonRoot_jsonbytes_to_data')[1].split('end_function')[0]
+        fn = gen({'x': 1}).split('function JsonRoot_jsonbytes_to_iecdata')[1].split('end_function')[0]
         assert 'jstr:' not in fn
         assert 'JsonRoot_jsonstr_to_data' not in fn
 
     def test_jsonbytes_to_data_uses_bytes_find_key(self):
-        fn = gen({'x': 1}).split('function JsonRoot_jsonbytes_to_data')[1].split('end_function')[0]
-        assert "json_bytes_find_key(json, 'x')" in fn
+        # string fields use json_bytes_find_key with byte array key
+        fn = gen({'name': 'abc'}).split('function JsonRoot_jsonbytes_to_iecdata')[1].split('end_function')[0]
+        assert 'json_bytes_find_key(dat:=bytes, key:=key_name, start_index:=si, end_index:=ei, eno=>eno)' in fn
 
     def test_data_to_jsonbytes_uses_root_type(self):
         out = gen({'x': 1})
         assert 'var_in_out data: JsonRoot_t; end_var' in out
-        assert 'var_in_out json: array[*] of byte; end_var' in out
+        assert 'var_in_out bytes: array[*] of byte; end_var' in out
 
 
 class TestDataToJson:
     def test_string_field(self):
         out = gen({'name': 'abc'})
-        assert "json := '{';" in out
-        assert "json := concat(json, '\"');" in out
+        assert "txt := '{';" in out
+        assert "txt := concat(txt, '\"');" in out
         assert 'json_escape(data.name)' in out
 
     def test_numeric_field(self):
         out = gen({'val': 3.14})
         assert 'sv := lreal_to_string(data.val);' in out
-        assert 'json := concat(json, sv);' in out
+        assert 'txt := concat(txt, sv);' in out
 
     def test_bool_field(self):
         out = gen({'flag': True})
         assert 'if data.flag then' in out
-        assert "json := concat(json, 'true');" in out
-        assert "json := concat(json, 'false');" in out
+        assert "txt := concat(txt, 'true');" in out
+        assert "txt := concat(txt, 'false');" in out
 
     def test_nested_object(self):
         out = gen({'pos': {'x': 1.0, 'y': 2.0}})
-        assert "json := concat(json, '{');" in out
+        assert "txt := concat(txt, '{');" in out
         assert 'sv := lreal_to_string(data.pos.x);' in out
         assert 'sv := lreal_to_string(data.pos.y);' in out
 
     def test_array_field(self):
         out = gen({'nums': [1, 2, 3]})
-        assert "json := concat(json, '[');" in out
+        assert "txt := concat(txt, '[');" in out
         assert 'sv := dint_to_string(data.nums[0]);' in out
         assert 'sv := dint_to_string(data.nums[2]);' in out
-        assert "json := concat(json, ']');" in out
+        assert "txt := concat(txt, ']');" in out
 
     def test_var_in_out_declared(self):
         out = gen({'x': 1})
         assert 'var_in_out data: JsonRoot_t; end_var' in out
-        assert 'var_in_out json: string[1024]; end_var' in out
+        assert 'var_in_out txt: string[JSON_STRING_SIZE]; end_var' in out
 
     def test_negative_int_field(self):
         out = gen({'val': -42})
@@ -164,61 +169,60 @@ class TestDataToJson:
 
     def test_function_name(self):
         out = gen({'x': 1})
-        assert 'function JsonRoot_data_to_jsonstr' in out
+        assert 'function JsonRoot_iecdata_to_jsontext' in out
         assert 'end_function' in out
 
 
 class TestJsonToData:
     def test_string_extraction(self):
         out = gen({'name': 'abc'})
-        assert "json_find_key(json, 'name')" in out
-        assert 'json_unescape(in:=mid(json,' in out
+        assert "json_find_key(dat:=txt, key:='name')" in out
+        assert 'json_unescape(in:=mid(txt,' in out
         assert 'data.name :=' in out
 
     def test_numeric_extraction(self):
         out = gen({'count': 42})
-        assert "json_find_key(json, 'count')" in out
-        assert 'pos := pos + 8;' in out
-        assert 'string_to_dint(mid(json,' in out
+        assert "json_extract_scalar(dat:=txt, key:='count', sv:=sv, eno=>eno)" in out
+        assert 'string_to_dint(sv)' in out
 
     def test_lreal_extraction(self):
         out = gen({'val': 1.0})
-        assert 'string_to_lreal(mid(json,' in out
+        assert "json_extract_scalar(dat:=txt, key:='val', sv:=sv, eno=>eno)" in out
+        assert 'string_to_lreal(sv)' in out
 
     def test_bool_extraction(self):
         out = gen({'flag': True})
-        assert "json_find_key(json, 'flag')" in out
-        assert "= 'true'" in out
+        assert "json_extract_scalar(dat:=txt, key:='flag', sv:=sv, eno=>eno)" in out
+        assert "sv = 'true'" in out
 
     def test_nested_struct_extraction(self):
         out = gen({'pos': {'x': 1.0}})
-        assert "json_find_key(json, 'pos')" in out
-        assert 'depth := 1;' in out
-        assert 'while depth > 0 do' in out
-        assert 'jblk1 := mid(json,' in out
-        assert "json_find_key(jblk1, 'x')" in out
+        # root function uses json_find_block + sub-function call
+        assert "json_find_block(dat:=txt, key:='pos', open_ch:='{', close_ch:='}', block:=jblk1, eno=>eno)" in out
+        assert 'private_JsonRoot_pos_t_jsontext_to_iecdata(txt:=jblk1, data:=data.pos, eno=>eno)' in out
+        # sub-function uses json_extract_scalar for the numeric field
+        assert "json_extract_scalar(dat:=txt, key:='x', sv:=sv, eno=>eno)" in out
 
     def test_array_extraction(self):
         out = gen({'tags': ['a', 'b']})
-        assert "json_find_key(json, 'tags')" in out
+        assert "json_find_block(dat:=txt, key:='tags', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno)" in out
         assert 'data.tags[0] :=' in out
         assert 'data.tags[1] :=' in out
 
     def test_var_temp_depth_when_nested(self):
         out = gen({'pos': {'x': 1.0}})
-        # depth: dint; appears in jsonstr_to_data var_temp for nested struct
-        jsonstr_fn = out.split('function JsonRoot_jsonstr_to_data')[1].split('end_function')[0]
-        assert 'depth: dint;' in jsonstr_fn
+        # pure struct nesting no longer needs depth in root jsontext_to_data
+        jsontext_fn = out.split('function JsonRoot_jsontext_to_iecdata')[1].split('end_function')[0]
+        assert 'depth: dint;' not in jsontext_fn
 
     def test_var_temp_no_depth_when_flat(self):
         out = gen({'x': 1, 'name': 'a'})
-        # flat struct: jsonstr_to_data should not declare depth in its own var_temp
-        jsonstr_fn = out.split('function JsonRoot_jsonstr_to_data')[1].split('end_function')[0]
-        assert 'depth: dint;' not in jsonstr_fn
+        jsontext_fn = out.split('function JsonRoot_jsontext_to_iecdata')[1].split('end_function')[0]
+        assert 'depth: dint;' not in jsontext_fn
 
     def test_var_in_out_declared(self):
         out = gen({'x': 1})
-        assert 'var_in_out json: string[1024]; end_var' in out
+        assert 'var_in_out txt: string[JSON_STRING_SIZE]; end_var' in out
         assert 'var_in_out data: JsonRoot_t; end_var' in out
 
 
@@ -231,7 +235,7 @@ class TestCustomOptions:
         out = gen({'n': 1}, int_type='lint')
         assert 'n: lint;' in out
         assert 'sv := lint_to_string(data.n);' in out
-        assert 'string_to_lint(mid(json,' in out
+        assert 'string_to_lint(sv)' in out
 
     def test_custom_string_type(self):
         out = gen({'name': 'abc'}, string_type='string[128]')
@@ -282,10 +286,10 @@ class TestInputFiles:
 
     def test_functions_generated(self, stem, root_name):
         out = gen(_load(stem), prefix=root_name)
-        assert 'function ' + root_name + '_data_to_jsonstr' in out
-        assert 'function ' + root_name + '_jsonstr_to_data' in out
-        assert 'function ' + root_name + '_data_to_jsonbytes' in out
-        assert 'function ' + root_name + '_jsonbytes_to_data' in out
+        assert 'function ' + root_name + '_iecdata_to_jsontext' in out
+        assert 'function ' + root_name + '_jsontext_to_iecdata' in out
+        assert 'function ' + root_name + '_iecdata_to_jsonbytes' in out
+        assert 'function ' + root_name + '_jsonbytes_to_iecdata' in out
 
     def test_helper_functions_included(self, stem, root_name):
         out = gen(_load(stem), prefix=root_name)

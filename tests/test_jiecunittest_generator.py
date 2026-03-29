@@ -50,8 +50,8 @@ class TestHeader:
 
     def test_both_test_names_listed(self):
         out = gen_test({'x': 1})
-        assert "'test_JsonRoot_jsonstr_to_data'" in out
-        assert "'test_JsonRoot_data_to_jsonstr'" in out
+        assert "'test_JsonRoot_jsontext_to_iecdata'" in out
+        assert "'test_JsonRoot_iecdata_to_jsontext'" in out
 
 
 # ---------------------------------------------------------------------------
@@ -61,12 +61,12 @@ class TestHeader:
 class TestTestJsonToData:
     def test_block_opens_and_closes(self):
         out = gen_test({'x': 1})
-        assert 'TEST_S(test_JsonRoot_jsonstr_to_data)' in out
+        assert 'TEST_S(test_JsonRoot_jsontext_to_iecdata)' in out
         assert 'END_TEST_S' in out
 
     def test_var_json_declared(self):
         out = gen_test({'x': 1})
-        assert 'json: string[4096];' in out
+        assert 'txt: string[4096];' in out
 
     def test_var_data_declared(self):
         out = gen_test({'x': 1})
@@ -74,11 +74,11 @@ class TestTestJsonToData:
 
     def test_json_assignment_present(self):
         out = gen_test({'x': 1})
-        assert "json := '{\"x\":1}';" in out
+        assert "txt := '{\"x\":1}';" in out
 
     def test_jsonstr_to_data_call(self):
         out = gen_test({'x': 1})
-        assert 'jsonstr_to_data(json, data);' in out
+        assert 'jsontext_to_iecdata(txt, data);' in out
 
     def test_st_delimiters(self):
         out = gen_test({'x': 1})
@@ -134,7 +134,7 @@ class TestTestJsonToData:
 class TestTestDataToJson:
     def test_block_opens_and_closes(self):
         out = gen_test({'x': 1})
-        assert 'TEST_S(test_JsonRoot_data_to_jsonstr)' in out
+        assert 'TEST_S(test_JsonRoot_iecdata_to_jsontext)' in out
         assert 'END_TEST_S' in out
 
     def test_var_data_declared(self):
@@ -147,7 +147,7 @@ class TestTestDataToJson:
 
     def test_var_json_declared(self):
         out = gen_test({'x': 1}, json_len='1024')
-        assert 'json: string[1024];' in out
+        assert 'txt: string[1024];' in out
 
     def test_string_assignment(self):
         out = gen_test({'name': 'sensor1'})
@@ -171,11 +171,11 @@ class TestTestDataToJson:
 
     def test_data_to_jsonstr_call(self):
         out = gen_test({'x': 1})
-        assert 'data_to_jsonstr(data, json);' in out
+        assert 'iecdata_to_jsontext(data, txt);' in out
 
     def test_jsonstr_to_data_roundtrip_call(self):
         out = gen_test({'x': 1})
-        assert 'jsonstr_to_data(json, data_rt);' in out
+        assert 'jsontext_to_iecdata(txt, data_rt);' in out
 
     def test_roundtrip_assertions_on_data_rt(self):
         out = gen_test({'n': 42, 'name': 'abc'})
@@ -190,6 +190,16 @@ class TestTestDataToJson:
         out = gen_test({'tags': ['a', 'b']})
         assert "data.tags[0] := 'a';" in out
         assert "data.tags[1] := 'b';" in out
+
+    def test_iecdata_to_jsonbytes_call_includes_start_index(self):
+        # iecdata_to_jsonbytes has start_index param; call must include it
+        out = gen_test({'x': 1})
+        assert 'iecdata_to_jsonbytes(data, bytes, -1);' in out
+
+    def test_jsonbytes_to_iecdata_call_includes_start_and_end_index(self):
+        # jsonbytes_to_iecdata has start_index and end_index; call must include both
+        out = gen_test({'x': 1})
+        assert 'jsonbytes_to_iecdata(bytes, -1, -1, data_rt);' in out
 
 
 # ---------------------------------------------------------------------------
@@ -393,13 +403,14 @@ class TestEscapeBlock:
         f = model.root.fields[0]
         assert f.type.iec_type == 'string[64]'
 
-    def test_eight_end_test_s_blocks(self):
+    def test_eleven_end_test_s_blocks(self):
         out = gen_test({'name': 'abc'})
         # jsonstr_to_data, data_to_jsonstr, jsonbytes_to_data, data_to_jsonbytes,
         # json_char_from_asciicharcode, json_asciicharcode,
-        # json_bytes_insert_str, json_find_key, json_bytes_find_key,
-        # json_escape, json_unescape
-        assert out.count('END_TEST_S') == 11
+        # json_bytes_insert_text, json_find_key, json_bytes_find_key,
+        # json_escape, json_find_block, json_extract_scalar, json_bytes_find_block,
+        # json_bytes_extract_scalar, json_bytes_to_str, json_unescape
+        assert out.count('END_TEST_S') == 16
 
 
 # ---------------------------------------------------------------------------
@@ -420,8 +431,8 @@ class TestExtraBlocks:
 
     def test_jtd_numbered_json_vars_declared(self):
         out = gen_test(self._data)
-        assert 'json1: string[4096];' in out
-        assert 'json6: string[4096];' in out
+        assert 'txt1: string[4096];' in out
+        assert 'txt6: string[4096];' in out
 
     def test_jtd_numbered_data_vars_declared(self):
         out = gen_test(self._data)
@@ -438,12 +449,12 @@ class TestExtraBlocks:
     def test_no_numbered_vars_when_only_int_field(self):
         out = gen_test({'n': 1})
         # int alone → 1 extra (int_negative): json1 exists but json2 does not
-        assert 'json1:' in out
-        assert 'json2:' not in out
+        assert 'txt1:' in out
+        assert 'txt2:' not in out
 
     def test_no_numbered_vars_when_no_optional_types(self):
         out = gen_test({'b': True})
-        assert 'json1:' not in out
+        assert 'txt1:' not in out
 
     # --- str_escaped (data1 / data1_rt) ---
 
@@ -525,13 +536,13 @@ class TestExtraBlocks:
 
     def test_total_end_test_s_count_with_string(self):
         out = gen_test(self._data)
-        # 4 model tests + 7 helper tests = 11
-        assert out.count('END_TEST_S') == 11
+        # 4 model tests + 12 helper tests = 16
+        assert out.count('END_TEST_S') == 16
 
     def test_total_end_test_s_count_no_string(self):
         out = gen_test({'n': 1, 'v': 2.5})
-        # same 11 blocks (helpers always included)
-        assert out.count('END_TEST_S') == 11
+        # same 16 blocks (helpers always included)
+        assert out.count('END_TEST_S') == 16
 
 
 # ---------------------------------------------------------------------------

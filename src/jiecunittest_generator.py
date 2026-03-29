@@ -75,7 +75,7 @@ def _first_string_field(root: StructType):
 
 
 class JiecUnitGenerator:
-    def __init__(self, pou_filename: str = 'output.txt', json_len: str = '1024'):
+    def __init__(self, pou_filename: str = 'output.txt', json_len: str = 'JSON_STRING_SIZE'):
         self._pou_filename = pou_filename
         self._json_len = json_len
 
@@ -89,21 +89,24 @@ class JiecUnitGenerator:
         """
         pfx = model.prefix + '_'
         all_names = [
-            'test_' + pfx + 'jsonstr_to_data', 'test_' + pfx + 'data_to_jsonstr',
-            'test_' + pfx + 'jsonbytes_to_data', 'test_' + pfx + 'data_to_jsonbytes',
+            'test_' + pfx + 'jsontext_to_iecdata', 'test_' + pfx + 'iecdata_to_jsontext',
+            'test_' + pfx + 'jsonbytes_to_iecdata', 'test_' + pfx + 'iecdata_to_jsonbytes',
             'test_json_char_from_asciicharcode', 'test_json_asciicharcode',
-            'test_json_bytes_insert_str',
+            'test_json_bytes_insert_text',
             'test_json_find_key', 'test_json_bytes_find_key',
-            'test_json_escape', 'test_json_unescape',
+            'test_json_escape', 'test_json_find_block',
+            'test_json_extract_scalar', 'test_json_bytes_find_block',
+            'test_json_bytes_extract_scalar', 'test_json_bytes_to_str',
+            'test_json_unescape',
         ]
 
         parts = [
             self._gen_header(command),
             self._gen_configuration(all_names),
-            self._gen_test_jsonstr_to_data(model, json_values),
-            self._gen_test_data_to_jsonstr(model, json_values),
-            self._gen_test_jsonbytes_to_data(model, json_values),
-            self._gen_test_data_to_jsonbytes(model, json_values),
+            self._gen_test_jsontext_to_iecdata(model, json_values),
+            self._gen_test_iecdata_to_jsontext(model, json_values),
+            self._gen_test_jsonbytes_to_iecdata(model, json_values),
+            self._gen_test_iecdata_to_jsonbytes(model, json_values),
         ]
         parts.append(_TEST_JSON_HELPERS)
         return '\n\n'.join(parts)
@@ -130,35 +133,35 @@ class JiecUnitGenerator:
 
     # -------------------------------------------------------- base TEST_S blocks
 
-    def _gen_test_jsonstr_to_data(self, model: TypeModel, json_values) -> str:
+    def _gen_test_jsontext_to_iecdata(self, model: TypeModel, json_values) -> str:
         jlen = self._json_len
         root_name = model.root.name
         values = json_values if json_values is not None else _default_value_for_type(model.root)
         json_str = self._build_json_string(model, json_values)
 
         var_decls = [
-            'json: string[' + jlen + '];',
+            'txt: string[' + jlen + '];',
             'data: ' + root_name + ';',
         ]
         pfx = model.prefix + '_'
         body = [
-            'json := ' + self._iec_str_literal(json_str) + ';',
-            pfx + 'jsonstr_to_data(json, data);',
+            'txt := ' + self._iec_str_literal(json_str) + ';',
+            pfx + 'jsontext_to_iecdata(txt, data);',
         ]
         body.extend(self._assertions_for_struct(model.root, 'data', values))
 
         for i, (jstr, assert_tmpls) in enumerate(self._jtd_extra_cases(model), 1):
             n = str(i)
-            jn, dn = 'json' + n, 'data' + n
-            var_decls.append(jn + ': string[' + jlen + '];')
+            tn, dn = 'txt' + n, 'data' + n
+            var_decls.append(tn + ': string[' + jlen + '];')
             var_decls.append(dn + ': ' + root_name + ';')
-            body.append(jn + ' := ' + self._iec_str_literal(jstr) + ';')
-            body.append(pfx + 'jsonstr_to_data(' + jn + ', ' + dn + ');')
+            body.append(tn + ' := ' + self._iec_str_literal(jstr) + ';')
+            body.append(pfx + 'jsontext_to_iecdata(' + tn + ', ' + dn + ');')
             body.extend(a.format(d=dn) for a in assert_tmpls)
 
-        return self._make_test_s('test_' + pfx + 'jsonstr_to_data', var_decls, body)
+        return self._make_test_s('test_' + pfx + 'jsontext_to_iecdata', var_decls, body)
 
-    def _gen_test_data_to_jsonstr(self, model: TypeModel, json_values) -> str:
+    def _gen_test_iecdata_to_jsontext(self, model: TypeModel, json_values) -> str:
         jlen = self._json_len
         root_name = model.root.name
         values = json_values if json_values is not None else _default_value_for_type(model.root)
@@ -166,59 +169,59 @@ class JiecUnitGenerator:
         var_decls = [
             'data: ' + root_name + ';',
             'data_rt: ' + root_name + ';',
-            'json: string[' + jlen + '];',
+            'txt: string[' + jlen + '];',
         ]
         pfx = model.prefix + '_'
         body = self._assignments_for_struct(model.root, 'data', values)
-        body += [pfx + 'data_to_jsonstr(data, json);', pfx + 'jsonstr_to_data(json, data_rt);']
+        body += [pfx + 'iecdata_to_jsontext(data, txt);', pfx + 'jsontext_to_iecdata(txt, data_rt);']
         body.extend(self._assertions_for_struct(model.root, 'data_rt', values))
 
         for i, (assign_tmpl, assert_tmpl) in enumerate(self._dtj_extra_cases(model), 1):
             n = str(i)
-            dn, jn, rn = 'data' + n, 'json' + n, 'data' + n + '_rt'
+            dn, tn, rn = 'data' + n, 'txt' + n, 'data' + n + '_rt'
             var_decls.append(dn + ': ' + root_name + ';')
-            var_decls.append(jn + ': string[' + jlen + '];')
+            var_decls.append(tn + ': string[' + jlen + '];')
             var_decls.append(rn + ': ' + root_name + ';')
             body.append(assign_tmpl.format(d=dn))
-            body.append(pfx + 'data_to_jsonstr(' + dn + ', ' + jn + ');')
-            body.append(pfx + 'jsonstr_to_data(' + jn + ', ' + rn + ');')
+            body.append(pfx + 'iecdata_to_jsontext(' + dn + ', ' + tn + ');')
+            body.append(pfx + 'jsontext_to_iecdata(' + tn + ', ' + rn + ');')
             body.append(assert_tmpl.format(r=rn))
 
-        return self._make_test_s('test_' + pfx + 'data_to_jsonstr', var_decls, body)
+        return self._make_test_s('test_' + pfx + 'iecdata_to_jsontext', var_decls, body)
 
-    def _gen_test_jsonbytes_to_data(self, model: TypeModel, json_values) -> str:
+    def _gen_test_jsonbytes_to_iecdata(self, model: TypeModel, json_values) -> str:
         jlen = self._json_len
         root_name = model.root.name
         values = json_values if json_values is not None else _default_value_for_type(model.root)
 
         var_decls = [
             'data: ' + root_name + ';',
-            'jsonbytes: array[0..' + jlen + '] of byte;',
+            'bytes: array[0..' + jlen + '] of byte;',
             'data_rt: ' + root_name + ';',
         ]
         pfx = model.prefix + '_'
         body = self._assignments_for_struct(model.root, 'data', values)
-        body += [pfx + 'data_to_jsonbytes(data, jsonbytes);', pfx + 'jsonbytes_to_data(jsonbytes, data_rt);']
+        body += [pfx + 'iecdata_to_jsonbytes(data, bytes, -1);', pfx + 'jsonbytes_to_iecdata(bytes, -1, -1, data_rt);']
         body.extend(self._assertions_for_struct(model.root, 'data_rt', values))
 
-        return self._make_test_s('test_' + pfx + 'jsonbytes_to_data', var_decls, body)
+        return self._make_test_s('test_' + pfx + 'jsonbytes_to_iecdata', var_decls, body)
 
-    def _gen_test_data_to_jsonbytes(self, model: TypeModel, json_values) -> str:
+    def _gen_test_iecdata_to_jsonbytes(self, model: TypeModel, json_values) -> str:
         jlen = self._json_len
         root_name = model.root.name
         values = json_values if json_values is not None else _default_value_for_type(model.root)
 
         var_decls = [
             'data: ' + root_name + ';',
-            'jsonbytes: array[0..' + jlen + '] of byte;',
+            'bytes: array[0..' + jlen + '] of byte;',
             'data_rt: ' + root_name + ';',
         ]
         pfx = model.prefix + '_'
         body = self._assignments_for_struct(model.root, 'data', values)
-        body += [pfx + 'data_to_jsonbytes(data, jsonbytes);', pfx + 'jsonbytes_to_data(jsonbytes, data_rt);']
+        body += [pfx + 'iecdata_to_jsonbytes(data, bytes, -1);', pfx + 'jsonbytes_to_iecdata(bytes, -1, -1, data_rt);']
         body.extend(self._assertions_for_struct(model.root, 'data_rt', values))
 
-        return self._make_test_s('test_' + pfx + 'data_to_jsonbytes', var_decls, body)
+        return self._make_test_s('test_' + pfx + 'iecdata_to_jsonbytes', var_decls, body)
 
     def _jtd_extra_cases(self, model: TypeModel) -> list:
         """Returns list of (json_str, [assertion_template with {d} placeholder]) for extra cases."""

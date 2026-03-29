@@ -39,8 +39,8 @@ def main():
                         help='Treat the input as JSON Schema')
     parser.add_argument('--root-name', default='JsonRoot',
                         help='Root name used for type and function names (default: JsonRoot)')
-    parser.add_argument('--json-string-size', default='1024', metavar='N',
-                        help='Maximum length for JSON string buffer, or a jiecc macro name (default: 1024)')
+    parser.add_argument('--json-string-size', default='JSON_STRING_SIZE', metavar='N',
+                        help='Maximum length for JSON string buffer, or a jiecc macro name (default: JSON_STRING_SIZE)')
     #
     parser.add_argument('--integer-type', default='dint', metavar='TYPE',
                         help='IEC integer type for JSON integer (default: dint)')

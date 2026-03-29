@@ -5,89 +5,94 @@
 {#ifdef _TEST_}
 DEFINE_CONFIGURATION(
 	_JIEC_TESTNAMES_LIST_(
-		'test_SimpleSchema_jsonstr_to_data',
-		'test_SimpleSchema_data_to_jsonstr',
-		'test_SimpleSchema_jsonbytes_to_data',
-		'test_SimpleSchema_data_to_jsonbytes',
+		'test_SimpleSchema_jsontext_to_iecdata',
+		'test_SimpleSchema_iecdata_to_jsontext',
+		'test_SimpleSchema_jsonbytes_to_iecdata',
+		'test_SimpleSchema_iecdata_to_jsonbytes',
 		'test_json_char_from_asciicharcode',
 		'test_json_asciicharcode',
-		'test_json_bytes_insert_str',
+		'test_json_bytes_insert_text',
 		'test_json_find_key',
 		'test_json_bytes_find_key',
 		'test_json_escape',
+		'test_json_find_block',
+		'test_json_extract_scalar',
+		'test_json_bytes_find_block',
+		'test_json_bytes_extract_scalar',
+		'test_json_bytes_to_str',
 		'test_json_unescape'
 	)
 )
 {#undef _TEST_}
 {#endif}
 
-TEST_S(test_SimpleSchema_jsonstr_to_data)
+TEST_S(test_SimpleSchema_jsontext_to_iecdata)
 	var
-		json: string[1024];
+		txt: string[JSON_STRING_SIZE];
 		data: SimpleSchema_t;
-		json1: string[1024];
+		txt1: string[JSON_STRING_SIZE];
 		data1: SimpleSchema_t;
-		json2: string[1024];
+		txt2: string[JSON_STRING_SIZE];
 		data2: SimpleSchema_t;
-		json3: string[1024];
+		txt3: string[JSON_STRING_SIZE];
 		data3: SimpleSchema_t;
-		json4: string[1024];
+		txt4: string[JSON_STRING_SIZE];
 		data4: SimpleSchema_t;
-		json5: string[1024];
+		txt5: string[JSON_STRING_SIZE];
 		data5: SimpleSchema_t;
-		json6: string[1024];
+		txt6: string[JSON_STRING_SIZE];
 		data6: SimpleSchema_t;
 	end
 	{st}
-	json := '{"name":"","value":0.0,"count":0,"active":false}';
-	SimpleSchema_jsonstr_to_data(json, data);
+	txt := '{"name":"","value":0.0,"count":0,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt, data);
 	EXPECT_EQ_STRING('', data.name);
 	EXPECT_NEAR(0.0, data.value, 0.001);
 	EXPECT_EQ_DINT(0, data.count);
 	EXPECT_FALSE(data.active);
-	json1 := '{"name":"hello\"world","value":0.0,"count":0,"active":false}';
-	SimpleSchema_jsonstr_to_data(json1, data1);
+	txt1 := '{"name":"hello\"world","value":0.0,"count":0,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt1, data1);
 	EXPECT_EQ_STRING('hello"world', data1.name);
-	json2 := '{"name":"","value":0.0,"count":0,"active":false}';
-	SimpleSchema_jsonstr_to_data(json2, data2);
+	txt2 := '{"name":"","value":0.0,"count":0,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt2, data2);
 	EXPECT_EQ_STRING('', data2.name);
-	json3 := '{"name":"","value":42,"count":0,"active":false}';
-	SimpleSchema_jsonstr_to_data(json3, data3);
+	txt3 := '{"name":"","value":42,"count":0,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt3, data3);
 	EXPECT_NEAR(42.0, data3.value, 0.001);
-	json4 := '{"name":"","value":1e3,"count":0,"active":false}';
-	SimpleSchema_jsonstr_to_data(json4, data4);
+	txt4 := '{"name":"","value":1e3,"count":0,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt4, data4);
 	EXPECT_NEAR(1000.0, data4.value, 0.001);
-	json5 := '{"name":"","value":-1.5,"count":0,"active":false}';
-	SimpleSchema_jsonstr_to_data(json5, data5);
+	txt5 := '{"name":"","value":-1.5,"count":0,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt5, data5);
 	EXPECT_NEAR(-1.5, data5.value, 0.001);
-	json6 := '{"name":"","value":0.0,"count":-42,"active":false}';
-	SimpleSchema_jsonstr_to_data(json6, data6);
+	txt6 := '{"name":"","value":0.0,"count":-42,"active":false}';
+	SimpleSchema_jsontext_to_iecdata(txt6, data6);
 	EXPECT_EQ_DINT(-42, data6.count);
 	{end}
 END_TEST_S
 
-TEST_S(test_SimpleSchema_data_to_jsonstr)
+TEST_S(test_SimpleSchema_iecdata_to_jsontext)
 	var
 		data: SimpleSchema_t;
 		data_rt: SimpleSchema_t;
-		json: string[1024];
+		txt: string[JSON_STRING_SIZE];
 		data1: SimpleSchema_t;
-		json1: string[1024];
+		txt1: string[JSON_STRING_SIZE];
 		data1_rt: SimpleSchema_t;
 		data2: SimpleSchema_t;
-		json2: string[1024];
+		txt2: string[JSON_STRING_SIZE];
 		data2_rt: SimpleSchema_t;
 		data3: SimpleSchema_t;
-		json3: string[1024];
+		txt3: string[JSON_STRING_SIZE];
 		data3_rt: SimpleSchema_t;
 		data4: SimpleSchema_t;
-		json4: string[1024];
+		txt4: string[JSON_STRING_SIZE];
 		data4_rt: SimpleSchema_t;
 		data5: SimpleSchema_t;
-		json5: string[1024];
+		txt5: string[JSON_STRING_SIZE];
 		data5_rt: SimpleSchema_t;
 		data6: SimpleSchema_t;
-		json6: string[1024];
+		txt6: string[JSON_STRING_SIZE];
 		data6_rt: SimpleSchema_t;
 	end
 	{st}
@@ -95,43 +100,43 @@ TEST_S(test_SimpleSchema_data_to_jsonstr)
 	data.value := 0.0;
 	data.count := 0;
 	data.active := false;
-	SimpleSchema_data_to_jsonstr(data, json);
-	SimpleSchema_jsonstr_to_data(json, data_rt);
+	SimpleSchema_iecdata_to_jsontext(data, txt);
+	SimpleSchema_jsontext_to_iecdata(txt, data_rt);
 	EXPECT_EQ_STRING('', data_rt.name);
 	EXPECT_NEAR(0.0, data_rt.value, 0.001);
 	EXPECT_EQ_DINT(0, data_rt.count);
 	EXPECT_FALSE(data_rt.active);
 	data1.name := 'hello"world';
-	SimpleSchema_data_to_jsonstr(data1, json1);
-	SimpleSchema_jsonstr_to_data(json1, data1_rt);
+	SimpleSchema_iecdata_to_jsontext(data1, txt1);
+	SimpleSchema_jsontext_to_iecdata(txt1, data1_rt);
 	EXPECT_EQ_STRING('hello"world', data1_rt.name);
 	data2.name := '';
-	SimpleSchema_data_to_jsonstr(data2, json2);
-	SimpleSchema_jsonstr_to_data(json2, data2_rt);
+	SimpleSchema_iecdata_to_jsontext(data2, txt2);
+	SimpleSchema_jsontext_to_iecdata(txt2, data2_rt);
 	EXPECT_EQ_STRING('', data2_rt.name);
 	data3.value := 42.0;
-	SimpleSchema_data_to_jsonstr(data3, json3);
-	SimpleSchema_jsonstr_to_data(json3, data3_rt);
+	SimpleSchema_iecdata_to_jsontext(data3, txt3);
+	SimpleSchema_jsontext_to_iecdata(txt3, data3_rt);
 	EXPECT_NEAR(42.0, data3_rt.value, 0.001);
 	data4.value := 1000.0;
-	SimpleSchema_data_to_jsonstr(data4, json4);
-	SimpleSchema_jsonstr_to_data(json4, data4_rt);
+	SimpleSchema_iecdata_to_jsontext(data4, txt4);
+	SimpleSchema_jsontext_to_iecdata(txt4, data4_rt);
 	EXPECT_NEAR(1000.0, data4_rt.value, 0.001);
 	data5.value := -1.5;
-	SimpleSchema_data_to_jsonstr(data5, json5);
-	SimpleSchema_jsonstr_to_data(json5, data5_rt);
+	SimpleSchema_iecdata_to_jsontext(data5, txt5);
+	SimpleSchema_jsontext_to_iecdata(txt5, data5_rt);
 	EXPECT_NEAR(-1.5, data5_rt.value, 0.001);
 	data6.count := -42;
-	SimpleSchema_data_to_jsonstr(data6, json6);
-	SimpleSchema_jsonstr_to_data(json6, data6_rt);
+	SimpleSchema_iecdata_to_jsontext(data6, txt6);
+	SimpleSchema_jsontext_to_iecdata(txt6, data6_rt);
 	EXPECT_EQ_DINT(-42, data6_rt.count);
 	{end}
 END_TEST_S
 
-TEST_S(test_SimpleSchema_jsonbytes_to_data)
+TEST_S(test_SimpleSchema_jsonbytes_to_iecdata)
 	var
 		data: SimpleSchema_t;
-		jsonbytes: array[0..1024] of byte;
+		bytes: array[0..JSON_STRING_SIZE] of byte;
 		data_rt: SimpleSchema_t;
 	end
 	{st}
@@ -139,8 +144,8 @@ TEST_S(test_SimpleSchema_jsonbytes_to_data)
 	data.value := 0.0;
 	data.count := 0;
 	data.active := false;
-	SimpleSchema_data_to_jsonbytes(data, jsonbytes);
-	SimpleSchema_jsonbytes_to_data(jsonbytes, data_rt);
+	SimpleSchema_iecdata_to_jsonbytes(data, bytes, -1);
+	SimpleSchema_jsonbytes_to_iecdata(bytes, -1, -1, data_rt);
 	EXPECT_EQ_STRING('', data_rt.name);
 	EXPECT_NEAR(0.0, data_rt.value, 0.001);
 	EXPECT_EQ_DINT(0, data_rt.count);
@@ -148,10 +153,10 @@ TEST_S(test_SimpleSchema_jsonbytes_to_data)
 	{end}
 END_TEST_S
 
-TEST_S(test_SimpleSchema_data_to_jsonbytes)
+TEST_S(test_SimpleSchema_iecdata_to_jsonbytes)
 	var
 		data: SimpleSchema_t;
-		jsonbytes: array[0..1024] of byte;
+		bytes: array[0..JSON_STRING_SIZE] of byte;
 		data_rt: SimpleSchema_t;
 	end
 	{st}
@@ -159,8 +164,8 @@ TEST_S(test_SimpleSchema_data_to_jsonbytes)
 	data.value := 0.0;
 	data.count := 0;
 	data.active := false;
-	SimpleSchema_data_to_jsonbytes(data, jsonbytes);
-	SimpleSchema_jsonbytes_to_data(jsonbytes, data_rt);
+	SimpleSchema_iecdata_to_jsonbytes(data, bytes, -1);
+	SimpleSchema_jsonbytes_to_iecdata(bytes, -1, -1, data_rt);
 	EXPECT_EQ_STRING('', data_rt.name);
 	EXPECT_NEAR(0.0, data_rt.value, 0.001);
 	EXPECT_EQ_DINT(0, data_rt.count);
@@ -644,26 +649,30 @@ TEST_S(test_json_asciicharcode)
 	{end}
 END_TEST_S
 
-TEST_S(test_json_bytes_insert_str)
+TEST_S(test_json_bytes_insert_text)
 	var
 		raw: array[0..9] of byte;
 		pos: dint;
 	end
 	{st}
-	pos := json_bytes_insert_str(raw, 0, 'AB');
+	pos := json_bytes_insert_text(dat:=raw, index:=0, str:='AB');
 	EXPECT_EQ_DINT(2, pos);
 	EXPECT_EQ_DINT(65, byte_to_dint(raw[0]));
 	EXPECT_EQ_DINT(66, byte_to_dint(raw[1]));
-	pos := json_bytes_insert_str(raw, pos, '{}');
+	pos := json_bytes_insert_text(dat:=raw, index:=pos, str:='{}');
 	EXPECT_EQ_DINT(4, pos);
 	EXPECT_EQ_DINT(123, byte_to_dint(raw[2]));
 	EXPECT_EQ_DINT(125, byte_to_dint(raw[3]));
 	{end}
 END_TEST_S
 
+
 TEST_S(test_json_bytes_find_key)
 	var
 		raw: array[0..127] of byte;
+		key_x: array[0..0] of byte := [byte#120];
+		key_b: array[0..0] of byte := [byte#98];
+		key_key: array[0..2] of byte := [byte#107, byte#101, byte#121];
 		wp: dint;
 		idx: dint;
 		ok: bool;
@@ -671,28 +680,28 @@ TEST_S(test_json_bytes_find_key)
 	{st}
 	// basic: single integer field
 	// {"x":42} - key 'x' value starts at byte 5 ('4' = 52)
-	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"x":42}', eno=>ok);
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"x":42}', eno=>ok);
 	raw[wp] := 0;
-	idx := json_bytes_find_key(raw, 'x');
+	idx := json_bytes_find_key(dat:=raw, key:=key_x, start_index:=0, end_index:=-1, eno=>ok);
 	EXPECT_EQ_DINT(5, idx);
 	EXPECT_EQ_DINT(52, byte_to_dint(raw[idx]));
 	// second field: {"a":1,"b":2} - key 'b' value starts at byte 11 ('2' = 50)
-	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"a":1,"b":2}', eno=>ok);
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"a":1,"b":2}', eno=>ok);
 	raw[wp] := 0;
-	idx := json_bytes_find_key(raw, 'b');
+	idx := json_bytes_find_key(dat:=raw, key:=key_b, start_index:=0, end_index:=-1, eno=>ok);
 	EXPECT_EQ_DINT(11, idx);
 	EXPECT_EQ_DINT(50, byte_to_dint(raw[idx]));
 	// nested: key inside nested object is not matched; top-level key is
 	// {"a":{"key":1},"key":2} - top-level 'key' value at byte 21 ('2' = 50)
-	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"a":{"key":1},"key":2}', eno=>ok);
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"a":{"key":1},"key":2}', eno=>ok);
 	raw[wp] := 0;
-	idx := json_bytes_find_key(raw, 'key');
+	idx := json_bytes_find_key(dat:=raw, key:=key_key, start_index:=0, end_index:=-1, eno=>ok);
 	EXPECT_EQ_DINT(21, idx);
 	EXPECT_EQ_DINT(50, byte_to_dint(raw[idx]));
-	// not found: eno = false
-	wp := json_bytes_insert_str(json:=raw, pos:=0, str:='{"other":1}', eno=>ok);
+	// not found: returns -1
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"other":1}', eno=>ok);
 	raw[wp] := 0;
-	idx := json_bytes_find_key(raw, 'x');
+	idx := json_bytes_find_key(dat:=raw, key:=key_x, start_index:=0, end_index:=-1, eno=>ok);
 	EXPECT_EQ_DINT(-1, idx);
 	{end}
 END_TEST_S
@@ -753,6 +762,181 @@ TEST_S(test_json_find_key)
 	src := '{"other":1}';
 	pos := json_find_key(src, 'key');
 	EXPECT_EQ_DINT(0, pos);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_find_block)
+	var
+		src: string[JSON_STRING_SIZE];
+		blk: string[JSON_STRING_SIZE];
+		ok: bool;
+	end
+	{st}
+	// basic: extract object block
+	src := '{"key":{"a":1},"other":2}';
+	json_find_block(dat:=src, key:='key', open_ch:='{', close_ch:='}', block:=blk, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('{"a":1}', blk);
+	// extract array block
+	src := '{"arr":[1,2,3],"x":0}';
+	json_find_block(dat:=src, key:='arr', open_ch:='[', close_ch:=']', block:=blk, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('[1,2,3]', blk);
+	// nested: outer block returned (ignores inner brackets of same type)
+	src := '{"a":{"b":{"c":1}}}';
+	json_find_block(dat:=src, key:='a', open_ch:='{', close_ch:='}', block:=blk, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('{"b":{"c":1}}', blk);
+	// string value containing bracket is not counted as bracket
+	src := '{"a":"x}y","b":{"v":1}}';
+	json_find_block(dat:=src, key:='b', open_ch:='{', close_ch:='}', block:=blk, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('{"v":1}', blk);
+	// key not found: eno = false
+	ok := true;
+	json_find_block(dat:=src, key:='missing', open_ch:='{', close_ch:='}', block:=blk, eno=>ok);
+	EXPECT_FALSE(ok);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_extract_scalar)
+	var
+		src: string[JSON_STRING_SIZE];
+		sv: string[JSON_STRING_SIZE];
+		ok: bool;
+	end
+	{st}
+	// extract integer value delimited by ','
+	src := '{"x":42,"y":1}';
+	json_extract_scalar(dat:=src, key:='x', sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('42', sv);
+	// extract last value delimited by '}'
+	src := '{"x":42,"y":7}';
+	json_extract_scalar(dat:=src, key:='y', sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('7', sv);
+	// extract value delimited by ']'
+	src := '[{"x":3}]';
+	json_extract_scalar(dat:=src, key:='x', sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('3', sv);
+	// extract float value
+	src := '{"v":3.14}';
+	json_extract_scalar(dat:=src, key:='v', sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('3.14', sv);
+	// extract boolean value
+	src := '{"flag":true}';
+	json_extract_scalar(dat:=src, key:='flag', sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('true', sv);
+	// key not found: eno = false
+	ok := true;
+	json_extract_scalar(dat:=src, key:='missing', sv:=sv, eno=>ok);
+	EXPECT_FALSE(ok);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_bytes_find_block)
+	var
+		raw: array[0..127] of byte;
+		key_pos: array[0..2] of byte := [byte#112, byte#111, byte#115];
+		key_arr: array[0..2] of byte := [byte#97, byte#114, byte#114];
+		key_missing: array[0..6] of byte := [byte#109, byte#105, byte#115, byte#115, byte#105, byte#110, byte#103];
+		bsi, bei: dint;
+		sv: string[JSON_STRING_SIZE];
+		wp: dint;
+		ok: bool;
+	end
+	{st}
+	// extract object block: verify indices point to '{'/'}' and content via json_bytes_to_str
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"pos":{"x":1},"y":2}', eno=>ok);
+	raw[wp] := 0;
+	json_bytes_find_block(dat:=raw, key:=key_pos, open_byte:=byte#123, close_byte:=byte#125, start_index:=0, end_index:=127, block_start_index:=bsi, block_end_index:=bei, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_INT(123, byte_to_dint(raw[bsi]));  // 123 = '{'
+	EXPECT_EQ_INT(125, byte_to_dint(raw[bei]));  // 125 = '}'
+	json_bytes_to_str(dat:=raw, start_index:=bsi, end_index:=bei, sv:=sv, eno=>ok);
+	EXPECT_EQ_STRING('{"x":1}', sv);
+	// extract array block: verify '['/']' indices
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"arr":[1,2,3]}', eno=>ok);
+	raw[wp] := 0;
+	json_bytes_find_block(dat:=raw, key:=key_arr, open_byte:=byte#91, close_byte:=byte#93, start_index:=0, end_index:=127, block_start_index:=bsi, block_end_index:=bei, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_INT(91, byte_to_dint(raw[bsi]));  // 91 = '['
+	EXPECT_EQ_INT(93, byte_to_dint(raw[bei]));  // 93 = ']'
+	// key not found: eno = false
+	ok := true;
+	json_bytes_find_block(dat:=raw, key:=key_missing, open_byte:=byte#123, close_byte:=byte#125, start_index:=0, end_index:=127, block_start_index:=bsi, block_end_index:=bei, eno=>ok);
+	EXPECT_FALSE(ok);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_bytes_extract_scalar)
+	var
+		raw: array[0..127] of byte;
+		key_x: array[0..0] of byte := [byte#120];
+		key_y: array[0..0] of byte := [byte#121];
+		key_flag: array[0..3] of byte := [byte#102, byte#108, byte#97, byte#103];
+		key_v: array[0..0] of byte := [byte#118];
+		key_missing: array[0..6] of byte := [byte#109, byte#105, byte#115, byte#115, byte#105, byte#110, byte#103];
+		sv: string[JSON_STRING_SIZE];
+		wp: dint;
+		ok: bool;
+	end
+	{st}
+	// extract integer value delimited by ','
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"x":42,"y":1}', eno=>ok);
+	raw[wp] := 0;
+	json_bytes_extract_scalar(dat:=raw, key:=key_x, start_index:=0, end_index:=127, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('42', sv);
+	// extract last value delimited by '}'
+	json_bytes_extract_scalar(dat:=raw, key:=key_y, start_index:=0, end_index:=127, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('1', sv);
+	// extract boolean value
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"flag":true}', eno=>ok);
+	raw[wp] := 0;
+	json_bytes_extract_scalar(dat:=raw, key:=key_flag, start_index:=0, end_index:=127, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('true', sv);
+	// extract float value
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"v":3.14}', eno=>ok);
+	raw[wp] := 0;
+	json_bytes_extract_scalar(dat:=raw, key:=key_v, start_index:=0, end_index:=127, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('3.14', sv);
+	// key not found: eno = false
+	ok := true;
+	json_bytes_extract_scalar(dat:=raw, key:=key_missing, start_index:=0, end_index:=127, sv:=sv, eno=>ok);
+	EXPECT_FALSE(ok);
+	{end}
+END_TEST_S
+
+TEST_S(test_json_bytes_to_str)
+	var
+		raw: array[0..127] of byte;
+		sv: string[JSON_STRING_SIZE];
+		wp: dint;
+		ok: bool;
+	end
+	{st}
+	// convert byte range to string
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='hello', eno=>ok);
+	json_bytes_to_str(dat:=raw, start_index:=0, end_index:=wp-1, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('hello', sv);
+	// empty range (end_index < start_index): result is ''
+	json_bytes_to_str(dat:=raw, start_index:=0, end_index:=-1, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('', sv);
+	// convert JSON-like content
+	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"x":1}', eno=>ok);
+	json_bytes_to_str(dat:=raw, start_index:=0, end_index:=wp-1, sv:=sv, eno=>ok);
+	EXPECT_TRUE(ok);
+	EXPECT_EQ_STRING('{"x":1}', sv);
 	{end}
 END_TEST_S
 

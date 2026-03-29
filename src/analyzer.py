@@ -101,6 +101,7 @@ def analyze_json(data: dict, prefix: str = 'JsonRoot', suffix: str = '_t',
         root=root,
         all_structs=all_structs,
         has_string=has_string_type(root),
+        string_type=string_type,
     )
 
 
@@ -168,4 +169,5 @@ def analyze_schema(schema: dict, prefix: str = 'JsonRoot', suffix: str = '_t',
         root=root,
         all_structs=all_structs,
         has_string=has_string_type(root),
+        string_type=string_type,
     )

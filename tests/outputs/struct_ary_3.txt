@@ -138,29 +138,29 @@ function json_char_from_asciicharcode: string[8]
 (*{end}*)
 end_function
 
-function json_bytes_insert_str: dint
+function json_bytes_insert_text: dint
 	_DEFINE_ENENO_()
-	var_in_out json: array[*] of byte; end_var
-	var_input pos: dint; end_var
+	var_in_out dat: array[*] of byte; end_var
+	var_input index: dint; end_var
 	var_input str: string[JSON_STRING_SIZE]; end_var
 	var_temp
 		slen, wp, ci, code: dint;
 	end_var
 (*{st}*)
 	slen := len(str);
-	wp := pos;
+	wp := index;
 	ci := 0;
 	while ci < slen do
 		code := json_asciicharcode(in:=mid(str, 1, dint_to_uint(ci + 1)), eno=>eno);
 		if not eno then
-			json_bytes_insert_str := -1;
+			json_bytes_insert_text := -1;
 			return;
 		end_if;
-		json[wp] := dint_to_byte(code);
+		dat[wp] := dint_to_byte(code);
 		wp := wp + 1;
 		ci := ci + 1;
 	end_while;
-	json_bytes_insert_str := wp;
+	json_bytes_insert_text := wp;
 (*{end}*)
 end_function
 
@@ -229,44 +229,49 @@ end_function
 function json_bytes_find_key: dint
 	_DEFINE_ENENO_()
 	var_in_out dat: array[*] of byte; end_var
-	var_input key: string[JSON_STRING_SIZE]; end_var
+	var_in_out key: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint := -1; end_var
 	var_temp
-		ci, klen, klen_i, tmp_ci: dint;
-		depth: dint;
-		sv, kpat: string[JSON_STRING_SIZE];
+		ci, klen_i, tmp_ci: dint;
+		depth, klen: dint;
 		match: bool;
+		ei: dint;
 	end_var
 (*{st}*)
-	// Scan null-terminated byte array at nesting depth 1, skipping string literals.
-	// Returns the 0-based byte index of the value (after '"key":'), or returns -1 if not found.
-	kpat := concat('"', concat(key, '":'));
-	klen := len(kpat);
+	// Scan dat[start_index..end_index] at nesting depth 1, skipping string literals.
+	// Returns the 0-based byte index of the value (after '"key":'), or -1 if not found.
+	// end_index=-1 means scan to the end of dat.
+	if end_index < 0 then ei := upper_bound(dat, 1); else ei := end_index; end_if;
+	klen := upper_bound(key, 1) - lower_bound(key, 1) + 1;
 	depth := 0;
-	ci := 0;
-	while dat[ci] <> 0 do
+	ci := start_index;
+	while ci <= ei and dat[ci] <> 0 do
 		if dat[ci] = 34 then  // '"'
 			if depth = 1 then
-				sv := '';
-				tmp_ci := ci;
 				match := true;
+				tmp_ci := ci + 1;
 				klen_i := 0;
-				while klen_i < klen and match do
-					sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(dat[tmp_ci]), eno=>eno));
-					if not eno then match := false; eno := true; end_if;
+				while klen_i < klen and match and tmp_ci <= ei do
+					if dat[tmp_ci] <> key[klen_i] then match := false; end_if;
 					tmp_ci := tmp_ci + 1;
 					klen_i := klen_i + 1;
 				end_while;
-				if match and sv = kpat then
-					json_bytes_find_key := ci + klen;
+				if match and tmp_ci + 1 <= ei and dat[tmp_ci] = 34 and dat[tmp_ci + 1] = 58 then  // '"' and ':'
+					json_bytes_find_key := tmp_ci + 2;
 					return;
 				end_if;
 			end_if;
 			// skip string literal
 			ci := ci + 1;
-			while dat[ci] <> 34 do
-				if dat[ci] = 92 then ci := ci + 1; end_if;  // 92 = '\'
+			while ci <= ei and dat[ci] <> 34 do
+				if dat[ci] = 92 then
+					ci := ci + 1;
+					if ci > ei then json_bytes_find_key := -1; return; end_if;
+				end_if;
 				ci := ci + 1;
 			end_while;
+			if ci > ei then json_bytes_find_key := -1; return; end_if;
 		elsif dat[ci] = 123 or dat[ci] = 91 then  // '{' or '['
 			depth := depth + 1;
 		elsif dat[ci] = 125 or dat[ci] = 93 then  // '}' or ']'
@@ -275,6 +280,167 @@ function json_bytes_find_key: dint
 		ci := ci + 1;
 	end_while;
 	json_bytes_find_key := -1;
+(*{end}*)
+end_function
+
+function json_find_block
+	_DEFINE_ENENO_()
+	var_in_out dat: string[JSON_STRING_SIZE]; end_var
+	var_input key: string[JSON_STRING_SIZE]; end_var
+	var_input open_ch: string[2]; end_var
+	var_input close_ch: string[2]; end_var
+	var_in_out block: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		pos, qos, slen, depth: dint;
+		ch: string[2];
+	end_var
+(*{st}*)
+	// Find key at depth 1 in dat, then extract the following {..} or [..] block.
+	// Writes the block into block. Sets eno=false if key not found or brackets unmatched.
+	pos := json_find_key(dat:=dat, key:=key);
+	if pos = 0 then eno := false; return; end_if;
+	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	qos := pos;
+	slen := uint_to_dint(len(dat));
+	depth := 1;
+	while depth > 0 do
+		qos := qos + 1;
+		if qos > slen then eno := false; return; end_if;
+		ch := mid(dat, 1, dint_to_uint(qos));
+		if ch = '"' then
+			// skip string literal to avoid false bracket matches
+			qos := qos + 1;
+			while mid(dat, 1, dint_to_uint(qos)) <> '"' do
+				if mid(dat, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
+				qos := qos + 1;
+			end_while;
+		elsif ch = open_ch then depth := depth + 1;
+		elsif ch = close_ch then depth := depth - 1;
+		end_if;
+	end_while;
+	block := mid(dat, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
+(*{end}*)
+end_function
+
+function json_extract_scalar
+	_DEFINE_ENENO_()
+	var_in_out dat: string[JSON_STRING_SIZE]; end_var
+	var_input key: string[JSON_STRING_SIZE]; end_var
+	var_in_out sv: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		pos, qp, slen: dint;
+		tail: string[JSON_STRING_SIZE];
+	end_var
+(*{st}*)
+	// Find key at depth 1 in dat, then extract the scalar value (up to ',', '}', or ']').
+	// Writes the value into sv. Sets eno=false if key not found or no delimiter.
+	pos := json_find_key(dat:=dat, key:=key);
+	if pos = 0 then eno := false; return; end_if;
+	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	slen := uint_to_dint(len(dat));
+	tail := mid(dat, dint_to_uint(slen - pos + 1), dint_to_uint(pos));
+	qp := find(tail, ',');
+	if qp = 0 then qp := find(tail, '}'); end_if;
+	if qp = 0 then qp := find(tail, ']'); end_if;
+	if qp = 0 then eno := false; return; end_if;
+	sv := mid(dat, dint_to_uint(qp - 1), dint_to_uint(pos));
+(*{end}*)
+end_function
+
+function json_bytes_find_block
+	_DEFINE_ENENO_()
+	var_in_out dat: array[*] of byte; end_var
+	var_in_out key: array[*] of byte; end_var
+	var_input open_byte: byte; end_var
+	var_input close_byte: byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out block_start_index: dint; end_var
+	var_in_out block_end_index: dint; end_var
+	var_temp
+		raw_ci, raw_qos, raw_depth: dint;
+		dat_ub: dint;
+	end_var
+(*{st}*)
+	// Find key in byte array dat and set block_start_index/block_end_index
+	// to the inclusive range [open_byte..close_byte] within dat.
+	// open_byte/close_byte are the bracket bytes (e.g. 123/125 for {}).
+	// Sets eno=false if key not found or brackets unmatched.
+	raw_ci := json_bytes_find_key(dat:=dat, key:=key, start_index:=start_index, end_index:=end_index, eno=>eno);
+	if raw_ci = -1 then eno := false; return; end_if;
+	raw_qos := raw_ci;
+	raw_depth := 1;
+	dat_ub := upper_bound(dat, 1);
+	while raw_depth > 0 do
+		raw_qos := raw_qos + 1;
+		if raw_qos > dat_ub then eno := false; return; end_if;
+		if dat[raw_qos] = 34 then  // 34 = '"'
+			// skip string literal
+			raw_qos := raw_qos + 1;
+			while raw_qos <= dat_ub and dat[raw_qos] <> 34 do
+				if dat[raw_qos] = 92 then
+					raw_qos := raw_qos + 1;
+					if raw_qos > dat_ub then eno := false; return; end_if;
+				end_if;
+				raw_qos := raw_qos + 1;
+			end_while;
+			if raw_qos > dat_ub then eno := false; return; end_if;
+		elsif dat[raw_qos] = open_byte then raw_depth := raw_depth + 1;
+		elsif dat[raw_qos] = close_byte then raw_depth := raw_depth - 1;
+		end_if;
+	end_while;
+	block_start_index := raw_ci;
+	block_end_index := raw_qos;
+(*{end}*)
+end_function
+
+function json_bytes_extract_scalar
+	_DEFINE_ENENO_()
+	var_in_out dat: array[*] of byte; end_var
+	var_in_out key: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out sv: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		raw_ci: dint;
+		dat_ub: dint;
+	end_var
+(*{st}*)
+	// Find key in byte array dat, then extract the scalar value (up to ',', '}', ']', or NUL).
+	// Writes the value into sv. Sets eno=false if key not found.
+	raw_ci := json_bytes_find_key(dat:=dat, key:=key, start_index:=start_index, end_index:=end_index, eno=>eno);
+	if raw_ci = -1 then eno := false; return; end_if;
+	dat_ub := upper_bound(dat, 1);
+	sv := '';
+	while raw_ci <= dat_ub and dat[raw_ci] <> 44 and dat[raw_ci] <> 125 and dat[raw_ci] <> 93 and dat[raw_ci] <> 0 do
+		sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(dat[raw_ci]), eno=>eno));
+		if not eno then return; end_if;
+		raw_ci := raw_ci + 1;
+	end_while;
+	if raw_ci > dat_ub then eno := false; return; end_if;
+(*{end}*)
+end_function
+
+function json_bytes_to_str
+	_DEFINE_ENENO_()
+	var_in_out dat: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out sv: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		raw_ci: dint;
+	end_var
+(*{st}*)
+	// Convert dat[start_index..end_index] into a string.
+	// Sets eno=false if a byte cannot be converted.
+	if end_index > upper_bound(dat, 1) then eno := false; return; end_if;
+	sv := '';
+	raw_ci := start_index;
+	while raw_ci <= end_index do
+		sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(dat[raw_ci]), eno=>eno));
+		if not eno then return; end_if;
+		raw_ci := raw_ci + 1;
+	end_while;
 (*{end}*)
 end_function
 
@@ -363,427 +529,326 @@ function json_unescape: string[JSON_STRING_SIZE]
 (*{end}*)
 end_function
 	
-function StructAry3_data_to_jsonstr
+function private_StructAry3_units_body_pos_t_jsonbytes_to_iecdata
 	_DEFINE_ENENO_()
-	var_in_out data: StructAry3_t; end_var
-	var_in_out json: string[1024]; end_var
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out data: StructAry3_units_body_pos_t; end_var
 	var_temp
-		sv: string[JSON_STRING_SIZE];
+		key_x: array[0..0] of byte := [byte#120];
+		key_y: array[0..0] of byte := [byte#121];
+		sv: string[256];
 	end_var
 (*{st}*)
-	json := '{';
-	json := concat(json, '"units":');
-	json := concat(json, '[');
-	json := concat(json, '{');
-	json := concat(json, '"id":');
-	sv := dint_to_string(data.units[0].id);
-	json := concat(json, sv);
-	json := concat(json, ',"body":');
-	json := concat(json, '{');
-	json := concat(json, '"pos":');
-	json := concat(json, '{');
-	json := concat(json, '"x":');
-	sv := lreal_to_string(data.units[0].body.pos.x);
-	json := concat(json, sv);
-	json := concat(json, ',"y":');
-	sv := lreal_to_string(data.units[0].body.pos.y);
-	json := concat(json, sv);
-	json := concat(json, '}');
-	json := concat(json, ',"label":');
-	json := concat(json, '"');
-	json := concat(json, json_escape(data.units[0].body.label));
-	json := concat(json, '"');
-	json := concat(json, '}');
-	json := concat(json, '}');
-	json := concat(json, ',');
-	json := concat(json, '{');
-	json := concat(json, '"id":');
-	sv := dint_to_string(data.units[1].id);
-	json := concat(json, sv);
-	json := concat(json, ',"body":');
-	json := concat(json, '{');
-	json := concat(json, '"pos":');
-	json := concat(json, '{');
-	json := concat(json, '"x":');
-	sv := lreal_to_string(data.units[1].body.pos.x);
-	json := concat(json, sv);
-	json := concat(json, ',"y":');
-	sv := lreal_to_string(data.units[1].body.pos.y);
-	json := concat(json, sv);
-	json := concat(json, '}');
-	json := concat(json, ',"label":');
-	json := concat(json, '"');
-	json := concat(json, json_escape(data.units[1].body.label));
-	json := concat(json, '"');
-	json := concat(json, '}');
-	json := concat(json, '}');
-	json := concat(json, ']');
-	json := concat(json, '}');
+	// x: lreal
+	json_bytes_extract_scalar(dat:=bytes, key:=key_x, start_index:=start_index, end_index:=end_index, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.x := string_to_lreal(sv);
+	// y: lreal
+	json_bytes_extract_scalar(dat:=bytes, key:=key_y, start_index:=start_index, end_index:=end_index, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.y := string_to_lreal(sv);
 (*{end}*)
 end_function
-function StructAry3_data_to_jsonbytes
+function private_StructAry3_units_body_pos_t_jsontext_to_iecdata
 	_DEFINE_ENENO_()
-	var_in_out data: StructAry3_t; end_var
-	var_in_out json: array[*] of byte; end_var
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
+	var_in_out data: StructAry3_units_body_pos_t; end_var
 	var_temp
-		sv: string[JSON_STRING_SIZE];
+		sv: string[256];
+	end_var
+(*{st}*)
+	// x: lreal
+	json_extract_scalar(dat:=txt, key:='x', sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.x := string_to_lreal(sv);
+	// y: lreal
+	json_extract_scalar(dat:=txt, key:='y', sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.y := string_to_lreal(sv);
+(*{end}*)
+end_function
+function private_StructAry3_units_body_t_jsonbytes_to_iecdata
+	_DEFINE_ENENO_()
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out data: StructAry3_units_body_t; end_var
+	var_temp
+		key_pos: array[0..2] of byte := [byte#112, byte#111, byte#115];
+		key_label: array[0..4] of byte := [byte#108, byte#97, byte#98, byte#101, byte#108];
+		sv: string[256];
 		raw_ci: dint;
+		jblk1_bsi, jblk1_bei: dint;
 	end_var
 (*{st}*)
-	raw_ci := 0;
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"units":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '[');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"id":');
-	sv := dint_to_string(data.units[0].id);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"body":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"pos":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"x":');
-	sv := lreal_to_string(data.units[0].body.pos.x);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"y":');
-	sv := lreal_to_string(data.units[0].body.pos.y);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"label":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, json_escape(data.units[0].body.label));
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"id":');
-	sv := dint_to_string(data.units[1].id);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"body":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"pos":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '{');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"x":');
-	sv := lreal_to_string(data.units[1].body.pos.x);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"y":');
-	sv := lreal_to_string(data.units[1].body.pos.y);
-	raw_ci := json_bytes_insert_str(json, raw_ci, sv);
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ',"label":');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, json_escape(data.units[1].body.label));
-	raw_ci := json_bytes_insert_str(json, raw_ci, '"');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	raw_ci := json_bytes_insert_str(json, raw_ci, ']');
-	raw_ci := json_bytes_insert_str(json, raw_ci, '}');
-	json[raw_ci] := 0;
-(*{end}*)
-end_function
-function StructAry3_jsonstr_to_data
-	_DEFINE_ENENO_()
-	var_in_out json: string[1024]; end_var
-	var_in_out data: StructAry3_t; end_var
-	var_temp
-		pos, qos, qp: dint;
-		pos1, pos2, pos3, pos4: dint;
-		jblk1: string[1024];
-		jblk1_len: dint;
-		jblk1_sub: string[1024];
-		jblk2: string[1024];
-		jblk2_len: dint;
-		jblk2_sub: string[1024];
-		jblk3: string[1024];
-		jblk3_len: dint;
-		jblk3_sub: string[1024];
-		jblk4: string[1024];
-		jblk4_len: dint;
-		jblk4_sub: string[1024];
-		depth: dint;
-	end_var
-(*{st}*)
-	// units: array
-	pos := json_find_key(json, 'units');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 8;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(json, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(json, 1, dint_to_uint(qos)) <> '"' do
-				if mid(json, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(json, 1, dint_to_uint(qos)) = '[' then depth := depth + 1;
-		elsif mid(json, 1, dint_to_uint(qos)) = ']' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk1 := mid(json, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk1_len := len(jblk1);
-	pos2 := 2;
-	// [0]
-	qos := pos2;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk1, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk1, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk1, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk2 := mid(jblk1, dint_to_uint(qos - pos2 + 1), dint_to_uint(pos2));
-	jblk2_len := len(jblk2);
-	// id: dint
-	pos := json_find_key(jblk2, 'id');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 5;
-	jblk2_sub := mid(jblk2, dint_to_uint(jblk2_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk2_sub, ',');
-	if qp = 0 then qp := find(jblk2_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk2_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[0].id := string_to_dint(mid(jblk2, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// body: struct
-	pos := json_find_key(jblk2, 'body');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 7;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk2, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk2, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk2, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk3 := mid(jblk2, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk3_len := len(jblk3);
 	// pos: struct
-	pos := json_find_key(jblk3, 'pos');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 6;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk3, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk3, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk4 := mid(jblk3, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk4_len := len(jblk4);
-	// x: lreal
-	pos := json_find_key(jblk4, 'x');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[0].body.pos.x := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// y: lreal
-	pos := json_find_key(jblk4, 'y');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[0].body.pos.y := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// label: string
-	pos := json_find_key(jblk3, 'label');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 9;
-	qos := pos;
-	while qos <= jblk3_len do
-		if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
-		end_if;
-	end_while;
-	data.units[0].body.label := json_unescape(in:=mid(jblk3, dint_to_uint(qos - pos), dint_to_uint(pos)), eno=>eno);
+	json_bytes_find_block(dat:=bytes, key:=key_pos, open_byte:=byte#123, close_byte:=byte#125, start_index:=start_index, end_index:=end_index, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
 	if not eno then return; end_if;
-	pos2 := pos2 + jblk2_len + 1;
-	// [1]
-	qos := pos2;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk1, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk1, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk1, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk1, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk2 := mid(jblk1, dint_to_uint(qos - pos2 + 1), dint_to_uint(pos2));
-	jblk2_len := len(jblk2);
-	// id: dint
-	pos := json_find_key(jblk2, 'id');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 5;
-	jblk2_sub := mid(jblk2, dint_to_uint(jblk2_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk2_sub, ',');
-	if qp = 0 then qp := find(jblk2_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk2_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[1].id := string_to_dint(mid(jblk2, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// body: struct
-	pos := json_find_key(jblk2, 'body');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 7;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk2, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk2, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk2, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk3 := mid(jblk2, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk3_len := len(jblk3);
-	// pos: struct
-	pos := json_find_key(jblk3, 'pos');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 6;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk3, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk3, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk4 := mid(jblk3, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk4_len := len(jblk4);
-	// x: lreal
-	pos := json_find_key(jblk4, 'x');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[1].body.pos.x := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// y: lreal
-	pos := json_find_key(jblk4, 'y');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[1].body.pos.y := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// label: string
-	pos := json_find_key(jblk3, 'label');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 9;
-	qos := pos;
-	while qos <= jblk3_len do
-		if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
-		end_if;
-	end_while;
-	data.units[1].body.label := json_unescape(in:=mid(jblk3, dint_to_uint(qos - pos), dint_to_uint(pos)), eno=>eno);
+	private_StructAry3_units_body_pos_t_jsonbytes_to_iecdata(bytes:=bytes, start_index:=jblk1_bsi, end_index:=jblk1_bei, data:=data.pos, eno=>eno);
 	if not eno then return; end_if;
-	pos2 := pos2 + jblk2_len + 1;
-(*{end}*)
-end_function
-function StructAry3_jsonbytes_to_data
-	_DEFINE_ENENO_()
-	var_in_out json: array[*] of byte; end_var
-	var_in_out data: StructAry3_t; end_var
-	var_temp
-		sv: string[JSON_STRING_SIZE];
-		raw_ci, raw_qos, raw_depth: dint;
-		pos, qos, qp: dint;
-		pos1, pos2, pos3, pos4: dint;
-		jblk1: string[1024];
-		jblk1_len: dint;
-		jblk1_sub: string[1024];
-		jblk2: string[1024];
-		jblk2_len: dint;
-		jblk2_sub: string[1024];
-		jblk3: string[1024];
-		jblk3_len: dint;
-		jblk3_sub: string[1024];
-		jblk4: string[1024];
-		jblk4_len: dint;
-		jblk4_sub: string[1024];
-		depth: dint;
-	end_var
-(*{st}*)
-	// units: array
-	raw_ci := json_bytes_find_key(json, 'units');
+	// label: string
+	raw_ci := json_bytes_find_key(dat:=bytes, key:=key_label, start_index:=start_index, end_index:=end_index, eno=>eno);
 	if raw_ci = -1 then eno := false; return; end_if;
-	raw_qos := raw_ci;
-	raw_depth := 1;
-	while raw_depth > 0 do
-		raw_qos := raw_qos + 1;
-		if json[raw_qos] = 34 then
-			// skip string literal
-			raw_qos := raw_qos + 1;
-			while json[raw_qos] <> 34 do
-				if json[raw_qos] = 92 then raw_qos := raw_qos + 1; end_if;
-				raw_qos := raw_qos + 1;
-			end_while;
-		elsif json[raw_qos] = 91 then raw_depth := raw_depth + 1;
-		elsif json[raw_qos] = 93 then raw_depth := raw_depth - 1;
+	raw_ci := raw_ci + 1;  // skip opening "
+	sv := '';
+	while bytes[raw_ci] <> 34 do  // 34 = double-quote
+		if bytes[raw_ci] = 92 then  // 92 = backslash
+			sv := concat(sv, '\');
+			raw_ci := raw_ci + 1;
 		end_if;
-	end_while;
-	jblk1 := '';
-	while raw_ci <= raw_qos do
-		jblk1 := concat(jblk1, json_char_from_asciicharcode(code:=byte_to_dint(json[raw_ci]), eno=>eno));
+		sv := concat(sv, json_char_from_asciicharcode(code:=byte_to_dint(bytes[raw_ci]), eno=>eno));
 		if not eno then return; end_if;
 		raw_ci := raw_ci + 1;
 	end_while;
+	data.label := json_unescape(in:=sv, eno=>eno);
+	if not eno then return; end_if;
+(*{end}*)
+end_function
+function private_StructAry3_units_body_t_jsontext_to_iecdata
+	_DEFINE_ENENO_()
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
+	var_in_out data: StructAry3_units_body_t; end_var
+	var_temp
+		pos, qos: dint;
+		pos1: dint;
+		jblk1: string[JSON_STRING_SIZE];
+		jblk1_len: dint;
+		jblk1_sub: string[JSON_STRING_SIZE];
+	end_var
+(*{st}*)
+	// pos: struct
+	json_find_block(dat:=txt, key:='pos', open_ch:='{', close_ch:='}', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
+	jblk1_len := len(jblk1);
+	private_StructAry3_units_body_pos_t_jsontext_to_iecdata(txt:=jblk1, data:=data.pos, eno=>eno);
+	if not eno then return; end_if;
+	// label: string
+	pos := json_find_key(dat:=txt, key:='label');
+	if pos = 0 then eno := false; return; end_if;
+	pos := pos + 9;
+	qos := pos;
+	while qos <= uint_to_dint(len(txt)) do
+		if mid(txt, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
+		elsif mid(txt, 1, dint_to_uint(qos)) = '"' then exit;
+		else qos := qos + 1;
+		end_if;
+	end_while;
+	data.label := json_unescape(in:=mid(txt, dint_to_uint(qos - pos), dint_to_uint(pos)), eno=>eno);
+	if not eno then return; end_if;
+(*{end}*)
+end_function
+function private_StructAry3_units_t_jsonbytes_to_iecdata
+	_DEFINE_ENENO_()
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint; end_var
+	var_input end_index: dint; end_var
+	var_in_out data: StructAry3_units_t; end_var
+	var_temp
+		key_id: array[0..1] of byte := [byte#105, byte#100];
+		key_body: array[0..3] of byte := [byte#98, byte#111, byte#100, byte#121];
+		sv: string[256];
+		jblk1_bsi, jblk1_bei: dint;
+	end_var
+(*{st}*)
+	// id: dint
+	json_bytes_extract_scalar(dat:=bytes, key:=key_id, start_index:=start_index, end_index:=end_index, sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.id := string_to_dint(sv);
+	// body: struct
+	json_bytes_find_block(dat:=bytes, key:=key_body, open_byte:=byte#123, close_byte:=byte#125, start_index:=start_index, end_index:=end_index, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
+	if not eno then return; end_if;
+	private_StructAry3_units_body_t_jsonbytes_to_iecdata(bytes:=bytes, start_index:=jblk1_bsi, end_index:=jblk1_bei, data:=data.body, eno=>eno);
+	if not eno then return; end_if;
+(*{end}*)
+end_function
+function private_StructAry3_units_t_jsontext_to_iecdata
+	_DEFINE_ENENO_()
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
+	var_in_out data: StructAry3_units_t; end_var
+	var_temp
+		sv: string[256];
+		pos1: dint;
+		jblk1: string[JSON_STRING_SIZE];
+		jblk1_len: dint;
+		jblk1_sub: string[JSON_STRING_SIZE];
+	end_var
+(*{st}*)
+	// id: dint
+	json_extract_scalar(dat:=txt, key:='id', sv:=sv, eno=>eno);
+	if not eno then return; end_if;
+	data.id := string_to_dint(sv);
+	// body: struct
+	json_find_block(dat:=txt, key:='body', open_ch:='{', close_ch:='}', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
+	jblk1_len := len(jblk1);
+	private_StructAry3_units_body_t_jsontext_to_iecdata(txt:=jblk1, data:=data.body, eno=>eno);
+	if not eno then return; end_if;
+(*{end}*)
+end_function
+function StructAry3_iecdata_to_jsontext
+	_DEFINE_ENENO_()
+	var_in_out data: StructAry3_t; end_var
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		sv: string[256];
+	end_var
+(*{st}*)
+	txt := '{';
+	txt := concat(txt, '"units":');
+	txt := concat(txt, '[');
+	txt := concat(txt, '{');
+	txt := concat(txt, '"id":');
+	sv := dint_to_string(data.units[0].id);
+	txt := concat(txt, sv);
+	txt := concat(txt, ',"body":');
+	txt := concat(txt, '{');
+	txt := concat(txt, '"pos":');
+	txt := concat(txt, '{');
+	txt := concat(txt, '"x":');
+	sv := lreal_to_string(data.units[0].body.pos.x);
+	txt := concat(txt, sv);
+	txt := concat(txt, ',"y":');
+	sv := lreal_to_string(data.units[0].body.pos.y);
+	txt := concat(txt, sv);
+	txt := concat(txt, '}');
+	txt := concat(txt, ',"label":');
+	txt := concat(txt, '"');
+	txt := concat(txt, json_escape(data.units[0].body.label));
+	txt := concat(txt, '"');
+	txt := concat(txt, '}');
+	txt := concat(txt, '}');
+	txt := concat(txt, ',');
+	txt := concat(txt, '{');
+	txt := concat(txt, '"id":');
+	sv := dint_to_string(data.units[1].id);
+	txt := concat(txt, sv);
+	txt := concat(txt, ',"body":');
+	txt := concat(txt, '{');
+	txt := concat(txt, '"pos":');
+	txt := concat(txt, '{');
+	txt := concat(txt, '"x":');
+	sv := lreal_to_string(data.units[1].body.pos.x);
+	txt := concat(txt, sv);
+	txt := concat(txt, ',"y":');
+	sv := lreal_to_string(data.units[1].body.pos.y);
+	txt := concat(txt, sv);
+	txt := concat(txt, '}');
+	txt := concat(txt, ',"label":');
+	txt := concat(txt, '"');
+	txt := concat(txt, json_escape(data.units[1].body.label));
+	txt := concat(txt, '"');
+	txt := concat(txt, '}');
+	txt := concat(txt, '}');
+	txt := concat(txt, ']');
+	txt := concat(txt, '}');
+(*{end}*)
+end_function
+function StructAry3_iecdata_to_jsonbytes: dint
+	_DEFINE_ENENO_()
+	var_in_out data: StructAry3_t; end_var
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint := -1; end_var
+	var_temp
+		sv: string[256];
+		raw_ci, si: dint;
+	end_var
+(*{st}*)
+	if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;
+	raw_ci := si;
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"units":');
+	bytes[raw_ci] := byte#91;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"id":');
+	sv := dint_to_string(data.units[0].id);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"body":');
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"pos":');
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"x":');
+	sv := lreal_to_string(data.units[0].body.pos.x);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"y":');
+	sv := lreal_to_string(data.units[0].body.pos.y);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"label":');
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=json_escape(data.units[0].body.label));
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#44;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"id":');
+	sv := dint_to_string(data.units[1].id);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"body":');
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"pos":');
+	bytes[raw_ci] := byte#123;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:='"x":');
+	sv := lreal_to_string(data.units[1].body.pos.x);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"y":');
+	sv := lreal_to_string(data.units[1].body.pos.y);
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=sv);
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=',"label":');
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	raw_ci := json_bytes_insert_text(dat:=bytes, index:=raw_ci, str:=json_escape(data.units[1].body.label));
+	bytes[raw_ci] := byte#34;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#93;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := byte#125;
+	raw_ci := raw_ci + 1;
+	bytes[raw_ci] := 0;
+	StructAry3_iecdata_to_jsonbytes := raw_ci - si;
+(*{end}*)
+end_function
+function StructAry3_jsontext_to_iecdata
+	_DEFINE_ENENO_()
+	var_in_out txt: string[JSON_STRING_SIZE]; end_var
+	var_in_out data: StructAry3_t; end_var
+	var_temp
+		pos, qos, qp: dint;
+		pos1, pos2: dint;
+		jblk1: string[JSON_STRING_SIZE];
+		jblk1_len: dint;
+		jblk1_sub: string[JSON_STRING_SIZE];
+		jblk2: string[JSON_STRING_SIZE];
+		jblk2_len: dint;
+		jblk2_sub: string[JSON_STRING_SIZE];
+		depth: dint;
+	end_var
+(*{st}*)
+	// units: array
+	json_find_block(dat:=txt, key:='units', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
+	if not eno then return; end_if;
 	jblk1_len := len(jblk1);
 	pos2 := 2;
 	// [0]
@@ -804,90 +869,7 @@ function StructAry3_jsonbytes_to_data
 	end_while;
 	jblk2 := mid(jblk1, dint_to_uint(qos - pos2 + 1), dint_to_uint(pos2));
 	jblk2_len := len(jblk2);
-	// id: dint
-	pos := json_find_key(jblk2, 'id');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 5;
-	jblk2_sub := mid(jblk2, dint_to_uint(jblk2_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk2_sub, ',');
-	if qp = 0 then qp := find(jblk2_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk2_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[0].id := string_to_dint(mid(jblk2, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// body: struct
-	pos := json_find_key(jblk2, 'body');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 7;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk2, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk2, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk2, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk3 := mid(jblk2, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk3_len := len(jblk3);
-	// pos: struct
-	pos := json_find_key(jblk3, 'pos');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 6;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk3, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk3, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk4 := mid(jblk3, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk4_len := len(jblk4);
-	// x: lreal
-	pos := json_find_key(jblk4, 'x');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[0].body.pos.x := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// y: lreal
-	pos := json_find_key(jblk4, 'y');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[0].body.pos.y := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// label: string
-	pos := json_find_key(jblk3, 'label');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 9;
-	qos := pos;
-	while qos <= jblk3_len do
-		if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
-		end_if;
-	end_while;
-	data.units[0].body.label := json_unescape(in:=mid(jblk3, dint_to_uint(qos - pos), dint_to_uint(pos)), eno=>eno);
+	private_StructAry3_units_t_jsontext_to_iecdata(txt:=jblk2, data:=data.units[0], eno=>eno);
 	if not eno then return; end_if;
 	pos2 := pos2 + jblk2_len + 1;
 	// [1]
@@ -908,91 +890,79 @@ function StructAry3_jsonbytes_to_data
 	end_while;
 	jblk2 := mid(jblk1, dint_to_uint(qos - pos2 + 1), dint_to_uint(pos2));
 	jblk2_len := len(jblk2);
-	// id: dint
-	pos := json_find_key(jblk2, 'id');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 5;
-	jblk2_sub := mid(jblk2, dint_to_uint(jblk2_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk2_sub, ',');
-	if qp = 0 then qp := find(jblk2_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk2_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[1].id := string_to_dint(mid(jblk2, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// body: struct
-	pos := json_find_key(jblk2, 'body');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 7;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk2, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk2, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk2, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk2, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk3 := mid(jblk2, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk3_len := len(jblk3);
-	// pos: struct
-	pos := json_find_key(jblk3, 'pos');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 6;
-	qos := pos;
-	depth := 1;
-	while depth > 0 do
-		qos := qos + 1;
-		if mid(jblk3, 1, dint_to_uint(qos)) = '"' then
-			// skip string literal to avoid false bracket matches
-			qos := qos + 1;
-			while mid(jblk3, 1, dint_to_uint(qos)) <> '"' do
-				if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 1; end_if;
-				qos := qos + 1;
-			end_while;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '{' then depth := depth + 1;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '}' then depth := depth - 1;
-		end_if;
-	end_while;
-	jblk4 := mid(jblk3, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-	jblk4_len := len(jblk4);
-	// x: lreal
-	pos := json_find_key(jblk4, 'x');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[1].body.pos.x := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// y: lreal
-	pos := json_find_key(jblk4, 'y');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 4;
-	jblk4_sub := mid(jblk4, dint_to_uint(jblk4_len - pos + 1), dint_to_uint(pos));
-	qp := find(jblk4_sub, ',');
-	if qp = 0 then qp := find(jblk4_sub, '}'); end_if;
-	if qp = 0 then qp := find(jblk4_sub, ']'); end_if;
-	if qp = 0 then eno := false; return; end_if;
-	data.units[1].body.pos.y := string_to_lreal(mid(jblk4, dint_to_uint(qp - 1), dint_to_uint(pos)));
-	// label: string
-	pos := json_find_key(jblk3, 'label');
-	if pos = 0 then eno := false; return; end_if;
-	pos := pos + 9;
-	qos := pos;
-	while qos <= jblk3_len do
-		if mid(jblk3, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
-		elsif mid(jblk3, 1, dint_to_uint(qos)) = '"' then exit;
-		else qos := qos + 1;
-		end_if;
-	end_while;
-	data.units[1].body.label := json_unescape(in:=mid(jblk3, dint_to_uint(qos - pos), dint_to_uint(pos)), eno=>eno);
+	private_StructAry3_units_t_jsontext_to_iecdata(txt:=jblk2, data:=data.units[1], eno=>eno);
 	if not eno then return; end_if;
 	pos2 := pos2 + jblk2_len + 1;
+(*{end}*)
+end_function
+function StructAry3_jsonbytes_to_iecdata
+	_DEFINE_ENENO_()
+	var_in_out bytes: array[*] of byte; end_var
+	var_input start_index: dint := -1; end_var
+	var_input end_index: dint := -1; end_var
+	var_in_out data: StructAry3_t; end_var
+	var_temp
+		si, ei: dint;
+		key_units: array[0..4] of byte := [byte#117, byte#110, byte#105, byte#116, byte#115];
+		sv: string[256];
+		jblk1_bsi, jblk1_bei: dint;
+		qos: dint;
+		pos1, pos2: dint;
+		jblk2_bei: dint;
+		depth: dint;
+	end_var
+(*{st}*)
+	if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;
+	if end_index < 0 then ei := upper_bound(bytes, 1); else ei := end_index; end_if;
+	// units: array
+	json_bytes_find_block(dat:=bytes, key:=key_units, open_byte:=byte#91, close_byte:=byte#93, start_index:=si, end_index:=ei, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
+	if not eno then return; end_if;
+	pos1 := jblk1_bsi + 1;  // skip '['
+	// [0]
+	qos := pos1;
+	depth := 1;
+	while depth > 0 do
+		qos := qos + 1;
+		if qos > jblk1_bei then eno := false; return; end_if;
+		if bytes[qos] = 34 then  // '"'
+			qos := qos + 1;
+			while qos <= jblk1_bei and bytes[qos] <> 34 do
+				if bytes[qos] = 92 then
+					qos := qos + 1;
+					if qos > jblk1_bei then eno := false; return; end_if;
+				end_if;
+				qos := qos + 1;
+			end_while;
+			if qos > jblk1_bei then eno := false; return; end_if;
+		elsif bytes[qos] = 123 then depth := depth + 1;  // '{'
+		elsif bytes[qos] = 125 then depth := depth - 1;  // '}'
+		end_if;
+	end_while;
+	private_StructAry3_units_t_jsonbytes_to_iecdata(bytes:=bytes, start_index:=pos1, end_index:=qos, data:=data.units[0], eno=>eno);
+	if not eno then return; end_if;
+	pos1 := qos + 2;
+	// [1]
+	qos := pos1;
+	depth := 1;
+	while depth > 0 do
+		qos := qos + 1;
+		if qos > jblk1_bei then eno := false; return; end_if;
+		if bytes[qos] = 34 then  // '"'
+			qos := qos + 1;
+			while qos <= jblk1_bei and bytes[qos] <> 34 do
+				if bytes[qos] = 92 then
+					qos := qos + 1;
+					if qos > jblk1_bei then eno := false; return; end_if;
+				end_if;
+				qos := qos + 1;
+			end_while;
+			if qos > jblk1_bei then eno := false; return; end_if;
+		elsif bytes[qos] = 123 then depth := depth + 1;  // '{'
+		elsif bytes[qos] = 125 then depth := depth - 1;  // '}'
+		end_if;
+	end_while;
+	private_StructAry3_units_t_jsonbytes_to_iecdata(bytes:=bytes, start_index:=pos1, end_index:=qos, data:=data.units[1], eno=>eno);
+	if not eno then return; end_if;
+	pos1 := qos + 2;
 (*{end}*)
 end_function
