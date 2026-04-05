@@ -36,6 +36,14 @@ def _read_src(name: str) -> str:
 
 _JSON_HELPERS = _read_src('json_helpers.txt')
 
+# Byte literal constants for JSON structural characters
+_BYTE_OPEN_BRACE  = 'byte#123'  # {
+_BYTE_CLOSE_BRACE = 'byte#125'  # }
+_BYTE_OPEN_BRACK  = 'byte#91'   # [
+_BYTE_CLOSE_BRACK = 'byte#93'   # ]
+_BYTE_DQUOTE      = 'byte#34'   # "
+_BYTE_COMMA       = 'byte#44'   # ,
+
 
 def _indent(lines: list, n: int = 1) -> list:
     prefix = TAB * n
@@ -292,12 +300,12 @@ class IecGenerator:
         return '\n'.join(lines)
 
     def _struct_to_jsonbytes_body(self, st: StructType, path: str, json_var: str = 'dat') -> list:
-        lines = [json_var + "[raw_ci] := byte#123;", "raw_ci := raw_ci + 1;"]
+        lines = [json_var + "[raw_ci] := " + _BYTE_OPEN_BRACE + ";", "raw_ci := raw_ci + 1;"]
         for i, f in enumerate(st.fields):
             sep = '' if i == 0 else ','
             lines.append("raw_ci := json_bytes_insert_text(dat:=" + json_var + ", index:=raw_ci, str:='" + sep + '"' + f.name + '":' + "');")
             lines.extend(self._field_to_jsonbytes(f.type, path + '.' + f.name, json_var))
-        lines.append(json_var + "[raw_ci] := byte#125;")
+        lines.append(json_var + "[raw_ci] := " + _BYTE_CLOSE_BRACE + ";")
         lines.append("raw_ci := raw_ci + 1;")
         return lines
 
@@ -313,9 +321,9 @@ class IecGenerator:
     def _scalar_to_jsonbytes(self, t: ScalarType, path: str, json_var: str = 'dat') -> list:
         if t.json_type == 'string':
             return [
-                json_var + "[raw_ci] := byte#34;", "raw_ci := raw_ci + 1;",
+                json_var + "[raw_ci] := " + _BYTE_DQUOTE + ";", "raw_ci := raw_ci + 1;",
                 'raw_ci := json_bytes_insert_text(dat:=' + json_var + ', index:=raw_ci, str:=json_escape(' + path + '));',
-                json_var + "[raw_ci] := byte#34;", "raw_ci := raw_ci + 1;",
+                json_var + "[raw_ci] := " + _BYTE_DQUOTE + ";", "raw_ci := raw_ci + 1;",
             ]
         if t.json_type == 'boolean':
             return [
@@ -334,17 +342,17 @@ class IecGenerator:
     def _array_to_jsonbytes(self, t: ArrayType, path: str, idx_parts: list = None, json_var: str = 'dat') -> list:
         if idx_parts is None:
             idx_parts = []
-        lines = [json_var + "[raw_ci] := byte#91;", "raw_ci := raw_ci + 1;"]
+        lines = [json_var + "[raw_ci] := " + _BYTE_OPEN_BRACK + ";", "raw_ci := raw_ci + 1;"]
         for idx in range(t.size):
             if idx > 0:
-                lines.append(json_var + "[raw_ci] := byte#44;")
+                lines.append(json_var + "[raw_ci] := " + _BYTE_COMMA + ";")
                 lines.append("raw_ci := raw_ci + 1;")
             new_parts = idx_parts + [str(idx)]
             if isinstance(t.element_type, ArrayType):
                 lines.extend(self._array_to_jsonbytes(t.element_type, path, new_parts, json_var))
             else:
                 lines.extend(self._field_to_jsonbytes(t.element_type, path + '[' + ', '.join(new_parts) + ']', json_var))
-        lines.append(json_var + "[raw_ci] := byte#93;")
+        lines.append(json_var + "[raw_ci] := " + _BYTE_CLOSE_BRACK + ";")
         lines.append("raw_ci := raw_ci + 1;")
         return lines
 
@@ -429,7 +437,7 @@ class IecGenerator:
             elif isinstance(f.type, StructType):
                 lines.append('// ' + f.name + ': struct')
                 lines.append('json_bytes_find_block(dat:=' + json_var + ', key:=key_' + f.name + ''
-                              + ', open_byte:=byte#123, close_byte:=byte#125'
+                              + ', open_byte:=' + _BYTE_OPEN_BRACE + ', close_byte:=' + _BYTE_CLOSE_BRACE
                               + ', start_index:=' + si_expr + ', end_index:=' + ei_expr
                               + ', block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);')
                 lines.append('if not eno then return; end_if;')
@@ -442,7 +450,7 @@ class IecGenerator:
                 v1_bei = 'jblk1_bei'
                 lines.append('// ' + f.name + ': array')
                 lines.append('json_bytes_find_block(dat:=' + json_var + ', key:=key_' + f.name + ''
-                              + ', open_byte:=byte#91, close_byte:=byte#93'
+                              + ', open_byte:=' + _BYTE_OPEN_BRACK + ', close_byte:=' + _BYTE_CLOSE_BRACK
                               + ', start_index:=' + si_expr + ', end_index:=' + ei_expr
                               + ', block_start_index:=' + v1_bsi + ', block_end_index:=' + v1_bei + ', eno=>eno);')
                 lines.append('if not eno then return; end_if;')

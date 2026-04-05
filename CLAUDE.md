@@ -17,6 +17,8 @@
 
 ## Pythonコードルール
 - マルチバイト文字を使用しない。特に、コメントは、英語とする。
+- pytest では `sys.path.insert` を各テストファイルに個別記載せず、`tests/conftest.py` に集約する
+- `pytest.mark.parametrize` の `ids=` には重複しない一意な文字列を指定する
 
 ## テストコードルール
 - 1テストコードは、1事実を記述する。

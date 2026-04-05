@@ -41,6 +41,8 @@ def _strip_cmd_comment(text: str) -> str:
 
 @pytest.mark.parametrize('stem,extra_args', _CASES, ids=[c[0] for c in _CASES])
 def test_output_matches(stem, extra_args):
+    # Fact: generated output matches expected files for each input case
+    # Arrange
     input_file    = INPUTS_DIR / (stem + '.json')
     pou_expected  = OUTPUTS_DIR / (stem + '.txt')
     test_expected = OUTPUTS_DIR / ('test_' + stem + '.txt')
@@ -50,6 +52,7 @@ def test_output_matches(stem, extra_args):
     assert pou_expected.exists(),  f'Missing: {pou_expected}'
     assert test_expected.exists(), f'Missing: {test_expected}'
 
+    # Act
     result = subprocess.run(
         [sys.executable, str(MAIN)] + extra_args + [
             str(input_file),
@@ -58,6 +61,7 @@ def test_output_matches(stem, extra_args):
         ],
         capture_output=True, text=True, encoding='utf-8',
     )
+    # Assert
     assert result.returncode == 0, result.stderr
     assert _strip_cmd_comment(pou_out.read_text(encoding='utf-8'))  == _strip_cmd_comment(pou_expected.read_text(encoding='utf-8'))
     assert _strip_cmd_comment(test_out.read_text(encoding='utf-8')) == _strip_cmd_comment(test_expected.read_text(encoding='utf-8'))
@@ -68,29 +72,40 @@ def test_output_matches(stem, extra_args):
 # ---------------------------------------------------------------------------
 
 def test_error_on_null_field(tmp_path):
+    # Fact: main returns a non-zero exit code and reports null in stderr for a null JSON field
+    # Arrange
     f = tmp_path / 'x.json'
     f.write_text('{"x": null}', encoding='utf-8')
+    # Act
     r = subprocess.run(
         [sys.executable, str(MAIN), str(f)],
         capture_output=True, text=True,
     )
+    # Assert
     assert r.returncode != 0
     assert 'null' in r.stderr.lower()
 
 
 def test_error_on_invalid_json(tmp_path):
+    # Fact: main returns a non-zero exit code for invalid JSON input
+    # Arrange
     f = tmp_path / 'x.json'
     f.write_text('{bad json', encoding='utf-8')
+    # Act
     r = subprocess.run(
         [sys.executable, str(MAIN), str(f)],
         capture_output=True, text=True,
     )
+    # Assert
     assert r.returncode != 0
 
 
 def test_error_on_missing_file():
+    # Fact: main returns a non-zero exit code when the input file does not exist
+    # Arrange / Act
     r = subprocess.run(
         [sys.executable, str(MAIN), 'nonexistent.json'],
         capture_output=True, text=True,
     )
+    # Assert
     assert r.returncode != 0

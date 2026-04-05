@@ -17,8 +17,8 @@ class StructField:
 
 @dataclass
 class StructType:
-    name: str       # e.g. "JsonRoot_pos_t"
-    fields: list    # list[StructField]
+    name: str                    # e.g. "JsonRoot_pos_t"
+    fields: list['StructField']
 
 
 @dataclass
@@ -32,12 +32,12 @@ AnyType = Union[ScalarType, StructType, ArrayType]
 
 @dataclass
 class TypeModel:
-    prefix: str           # e.g. "JsonRoot"
-    suffix: str           # e.g. "_t"
-    root: StructType      # root STRUCT
-    all_structs: list     # all STRUCTs in output order (leaf-first)
-    has_string: bool      # whether json_escape/unescape need to be generated
-    string_type: str      # IEC string type for string fields (e.g. 'string[256]')
+    prefix: str                  # e.g. "JsonRoot"
+    suffix: str                  # e.g. "_t"
+    root: StructType             # root STRUCT
+    all_structs: list[StructType]  # all STRUCTs in output order (leaf-first)
+    has_string: bool             # whether json_escape/unescape need to be generated
+    string_type: str             # IEC string type for string fields (e.g. 'string[256]')
 
 
 def has_string_type(t: AnyType) -> bool:
