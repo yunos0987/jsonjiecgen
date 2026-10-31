@@ -37,7 +37,7 @@ With testing (--test):
 ## 必要環境
 
 - Python 3.10 以降
-- [Jiecc](https://www.graviness.com/iec_61131-3/jiecc.html) — 生成コードのコンパイルに必要
+- [Jiecc](https://www.graviness.com/iec_61131-3/jiecc.html) 9.2.0 以降 — 生成コードのコンパイルに必要（生成コードの先頭に、9.2.0 未満では `{#error}` で止まるバージョンガードを出力します）
 - [jiecunit](https://github.com/yunos0987/jiecunit) — 生成コードの単体テストを行う場合に必要
 
 ## インストール

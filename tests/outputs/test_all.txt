@@ -1,4 +1,7 @@
 (* $ jiecc ./tests/outputs/test_all.txt -D_TEST_ -I./tests/outputs -I<jiecunit root> -I<jiecunit root>/sys -o ./test_all.xml -t omron *)
+{#if _JIECC and (_JIECC_FULL_VER < 90200)}
+{#error Generated code requires Jiecc 9.2.0 or later.}
+{#endif}
 {#include <jiecunit.txt>}
 
 {#ifdef _TEST_}

@@ -2,6 +2,7 @@
 import json as _json
 import pathlib as _pathlib
 from model import ScalarType, StructType, ArrayType, AnyType, StructField, TypeModel
+from generator import JIECC_VERSION_GUARD
 
 
 _TEST_JSON_HELPERS = (
@@ -118,6 +119,7 @@ class JiecUnitGenerator:
         if command:
             lines.append('(* ' + command + ' *)')
         lines += [
+            JIECC_VERSION_GUARD,
             '{#include <jiecunit.txt>}',
             '{#include <' + self._pou_filename + '>}',
         ]
@@ -291,9 +293,9 @@ class JiecUnitGenerator:
     def _make_test_s(self, name: str, var_decls: list, body: list) -> str:
         lines = ['TEST_S(' + name + ')', TAB + 'var']
         lines.extend(TAB + TAB + v for v in var_decls)
-        lines += [TAB + 'end', TAB + '{st}']
+        lines += [TAB + 'end']
         lines.extend(TAB + line for line in body)
-        lines += [TAB + '{end}', 'END_TEST_S']
+        lines += ['END_TEST_S']
         return '\n'.join(lines)
 
     # -------------------------------------------------------- focused JSON builders

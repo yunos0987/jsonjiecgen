@@ -94,6 +94,44 @@ class TestJsonHelpers:
         assert 'sv: string[128];' in fn
 
 
+class TestVersionGuard:
+    def test_guard_condition(self):
+        # Fact: the function code has a jiepp condition rejecting Jiecc older than 9.2.0
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert '{#if _JIECC and (_JIECC_FULL_VER < 90200)}' in out
+
+    def test_guard_error(self):
+        # Fact: the function code has a jiepp error directive for old Jiecc
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert '{#error Generated code requires Jiecc 9.2.0 or later.}' in out
+
+    def test_guard_once(self):
+        # Fact: the version guard appears exactly once in the function code
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert out.count('_JIECC_FULL_VER < 90200') == 1
+
+    def test_guard_first(self):
+        # Fact: the version guard is the first line of the function code
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert out.startswith('{#if _JIECC and (_JIECC_FULL_VER < 90200)}\n')
+
+    def test_no_st_markers(self):
+        # Fact: the function code does not contain st start or end markers
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert '{st}' not in out
+        assert '{end}' not in out
+
+
 class TestRawjsonFunctions:
     def test_data_to_jsonbytes_always_generated(self):
         # Fact: iecdata_to_jsonbytes function is always generated

@@ -1,4 +1,7 @@
 (* $ jiecc ./tests/outputs/simple_schema.txt -o ./tests/outputs/simple_schema.omron.xml -t omron *)
+{#if _JIECC and (_JIECC_FULL_VER < 90200)}
+{#error Generated code requires Jiecc 9.2.0 or later.}
+{#endif}
 type
 	SimpleSchema_t: struct
 		name: string[256];
@@ -28,7 +31,6 @@ function json_escape: string[JSON_STRING_SIZE]
 		ci, src_len: dint;
 		ch: string[8];
 	end_var
-(*{st}*)
 	result := '';
 	src_len := len(in);
 	for ci := 1 to src_len by 1 do
@@ -71,7 +73,6 @@ function json_escape: string[JSON_STRING_SIZE]
 		end_if;
 	end_for;
 	json_escape := result;
-(*{end}*)
 end_function
 
 function json_char_from_asciicharcode: string[8]
@@ -80,7 +81,6 @@ function json_char_from_asciicharcode: string[8]
 	var_temp
 		printable: string[128] := ' !"#$$%&$27()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
 	end_var
-(*{st}*)
 	case code of
 		32..126: json_char_from_asciicharcode := mid(printable, 1, dint_to_uint(code - 31));
 		0:   json_char_from_asciicharcode := '$00';
@@ -120,7 +120,6 @@ function json_char_from_asciicharcode: string[8]
 		eno := false; // Invalid code
 		json_char_from_asciicharcode := '';
 	end_case;
-(*{end}*)
 end_function
 
 function json_bytes_insert_text: dint
@@ -131,7 +130,6 @@ function json_bytes_insert_text: dint
 	var_temp
 		slen, wp, ci, code: dint;
 	end_var
-(*{st}*)
 	slen := len(str);
 	wp := index;
 	ci := 0;
@@ -146,7 +144,6 @@ function json_bytes_insert_text: dint
 		ci := ci + 1;
 	end_while;
 	json_bytes_insert_text := wp;
-(*{end}*)
 end_function
 
 function json_asciicharcode: dint
@@ -155,7 +152,6 @@ function json_asciicharcode: dint
 	var_temp
 		printable: string[128] := ' !"#$$%&$27()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
 	end_var
-(*{st}*)
 	json_asciicharcode := find(printable, in) + 31;
 	if json_asciicharcode <= 31 then
 		if      in = '$08' then json_asciicharcode := 8;
@@ -167,7 +163,6 @@ function json_asciicharcode: dint
 		else json_asciicharcode := 0;
 		end_if;
 	end_if;
-(*{end}*)
 end_function
 
 function json_find_key : dint
@@ -177,7 +172,6 @@ function json_find_key : dint
 		ci, slen, klen, depth: dint;
 		ch: string[2];
 	end_var
-(*{st}*)
 	// Scan dat at nesting depth 1, skipping string literals and nested blocks.
 	// Returns the 1-based position of the leading '"' of '"key":', or 0 if not found.
 	slen := len(dat);
@@ -208,7 +202,6 @@ function json_find_key : dint
 		ci := ci + 1;
 	end_while;
 	json_find_key := 0;
-(*{end}*)
 end_function
 
 function json_bytes_find_key: dint
@@ -223,7 +216,6 @@ function json_bytes_find_key: dint
 		match: bool;
 		ei: dint;
 	end_var
-(*{st}*)
 	// Scan dat[start_index..end_index] at nesting depth 1, skipping string literals.
 	// Returns the 0-based byte index of the value (after '"key":'), or -1 if not found.
 	// end_index=-1 means scan to the end of dat.
@@ -265,7 +257,6 @@ function json_bytes_find_key: dint
 		ci := ci + 1;
 	end_while;
 	json_bytes_find_key := -1;
-(*{end}*)
 end_function
 
 function json_find_block
@@ -279,7 +270,6 @@ function json_find_block
 		pos, qos, slen, depth: dint;
 		ch: string[2];
 	end_var
-(*{st}*)
 	// Find key at depth 1 in dat, then extract the following {..} or [..] block.
 	// Writes the block into block. Sets eno=false if key not found or brackets unmatched.
 	pos := json_find_key(dat:=dat, key:=key);
@@ -304,7 +294,6 @@ function json_find_block
 		end_if;
 	end_while;
 	block := mid(dat, dint_to_uint(qos - pos + 1), dint_to_uint(pos));
-(*{end}*)
 end_function
 
 function json_extract_scalar
@@ -316,7 +305,6 @@ function json_extract_scalar
 		pos, qp, slen: dint;
 		tail: string[JSON_STRING_SIZE];
 	end_var
-(*{st}*)
 	// Find key at depth 1 in dat, then extract the scalar value (up to ',', '}', or ']').
 	// Writes the value into sv. Sets eno=false if key not found or no delimiter.
 	pos := json_find_key(dat:=dat, key:=key);
@@ -329,7 +317,6 @@ function json_extract_scalar
 	if qp = 0 then qp := find(tail, ']'); end_if;
 	if qp = 0 then eno := false; return; end_if;
 	sv := mid(dat, dint_to_uint(qp - 1), dint_to_uint(pos));
-(*{end}*)
 end_function
 
 function json_bytes_find_block
@@ -346,7 +333,6 @@ function json_bytes_find_block
 		raw_ci, raw_qos, raw_depth: dint;
 		dat_ub: dint;
 	end_var
-(*{st}*)
 	// Find key in byte array dat and set block_start_index/block_end_index
 	// to the inclusive range [open_byte..close_byte] within dat.
 	// open_byte/close_byte are the bracket bytes (e.g. 123/125 for {}).
@@ -376,7 +362,6 @@ function json_bytes_find_block
 	end_while;
 	block_start_index := raw_ci;
 	block_end_index := raw_qos;
-(*{end}*)
 end_function
 
 function json_bytes_extract_scalar
@@ -390,7 +375,6 @@ function json_bytes_extract_scalar
 		raw_ci: dint;
 		dat_ub: dint;
 	end_var
-(*{st}*)
 	// Find key in byte array dat, then extract the scalar value (up to ',', '}', ']', or NUL).
 	// Writes the value into sv. Sets eno=false if key not found.
 	raw_ci := json_bytes_find_key(dat:=dat, key:=key, start_index:=start_index, end_index:=end_index, eno=>eno);
@@ -403,7 +387,6 @@ function json_bytes_extract_scalar
 		raw_ci := raw_ci + 1;
 	end_while;
 	if raw_ci > dat_ub then eno := false; return; end_if;
-(*{end}*)
 end_function
 
 function json_bytes_to_str
@@ -415,7 +398,6 @@ function json_bytes_to_str
 	var_temp
 		raw_ci: dint;
 	end_var
-(*{st}*)
 	// Convert dat[start_index..end_index] into a string.
 	// Sets eno=false if a byte cannot be converted.
 	if end_index > upper_bound(dat, 1) then eno := false; return; end_if;
@@ -426,7 +408,6 @@ function json_bytes_to_str
 		if not eno then return; end_if;
 		raw_ci := raw_ci + 1;
 	end_while;
-(*{end}*)
 end_function
 
 function json_unescape: string[JSON_STRING_SIZE]
@@ -440,7 +421,6 @@ function json_unescape: string[JSON_STRING_SIZE]
 		hex_d: string[23] := '0123456789abcdefABCDEF';
 		i1, i2, i3, i4, code: dint;
 	end_var
-(*{st}*)
 	result := '';
 	ci := 1;
 	src_len := len(in);
@@ -511,7 +491,6 @@ function json_unescape: string[JSON_STRING_SIZE]
 		ci := ci + 1;
 	end_while;
 	json_unescape := result;
-(*{end}*)
 end_function
 	
 function SimpleSchema_iecdata_to_jsontext
@@ -521,7 +500,6 @@ function SimpleSchema_iecdata_to_jsontext
 	var_temp
 		sv: string[256];
 	end_var
-(*{st}*)
 	txt := '{';
 	txt := concat(txt, '"name":');
 	txt := concat(txt, '"');
@@ -540,7 +518,6 @@ function SimpleSchema_iecdata_to_jsontext
 		txt := concat(txt, 'false');
 	end_if;
 	txt := concat(txt, '}');
-(*{end}*)
 end_function
 function SimpleSchema_iecdata_to_jsonbytes: dint
 	_DEFINE_ENENO_()
@@ -551,7 +528,6 @@ function SimpleSchema_iecdata_to_jsonbytes: dint
 		sv: string[256];
 		raw_ci, si: dint;
 	end_var
-(*{st}*)
 	if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;
 	raw_ci := si;
 	bytes[raw_ci] := byte#123;
@@ -578,7 +554,6 @@ function SimpleSchema_iecdata_to_jsonbytes: dint
 	raw_ci := raw_ci + 1;
 	bytes[raw_ci] := 0;
 	SimpleSchema_iecdata_to_jsonbytes := raw_ci - si;
-(*{end}*)
 end_function
 function SimpleSchema_jsontext_to_iecdata
 	_DEFINE_ENENO_()
@@ -588,7 +563,6 @@ function SimpleSchema_jsontext_to_iecdata
 		pos, qos: dint;
 		sv: string[256];
 	end_var
-(*{st}*)
 	// name: string
 	pos := json_find_key(dat:=txt, key:='name');
 	if pos = 0 then eno := false; return; end_if;
@@ -614,7 +588,6 @@ function SimpleSchema_jsontext_to_iecdata
 	json_extract_scalar(dat:=txt, key:='active', sv:=sv, eno=>eno);
 	if not eno then return; end_if;
 	data.active := sv = 'true';
-(*{end}*)
 end_function
 function SimpleSchema_jsonbytes_to_iecdata
 	_DEFINE_ENENO_()
@@ -631,7 +604,6 @@ function SimpleSchema_jsonbytes_to_iecdata
 		sv: string[256];
 		raw_ci: dint;
 	end_var
-(*{st}*)
 	if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;
 	if end_index < 0 then ei := upper_bound(bytes, 1); else ei := end_index; end_if;
 	// name: string
@@ -662,5 +634,4 @@ function SimpleSchema_jsonbytes_to_iecdata
 	json_bytes_extract_scalar(dat:=bytes, key:=key_active, start_index:=si, end_index:=ei, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
 	data.active := sv = 'true';
-(*{end}*)
 end_function

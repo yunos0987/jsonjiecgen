@@ -36,6 +36,13 @@ def _read_src(name: str) -> str:
 
 _JSON_HELPERS = _read_src('json_helpers.txt')
 
+# Version guard emitted at the top of generated code (Jiecc 9.2.0 or later is required)
+JIECC_VERSION_GUARD = '\n'.join([
+    '{#if _JIECC and (_JIECC_FULL_VER < 90200)}',
+    '{#error Generated code requires Jiecc 9.2.0 or later.}',
+    '{#endif}',
+])
+
 # Byte literal constants for JSON structural characters
 _BYTE_OPEN_BRACE  = 'byte#123'  # {
 _BYTE_CLOSE_BRACE = 'byte#125'  # }
@@ -91,6 +98,7 @@ class IecGenerator:
     def generate(self, model: TypeModel) -> str:
         self._string_type = model.string_type
         parts = []
+        parts.append(JIECC_VERSION_GUARD)
         parts.append(self._gen_type_defs(model))
         parts.append(_JSON_HELPERS)
         parts.append(self._gen_per_struct_extractors(model))
@@ -202,12 +210,10 @@ class IecGenerator:
             lines.append(TAB + 'var_temp')
             lines.append(TAB + TAB + 'sv: ' + self._string_type + ';')
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
 
         body = self._struct_to_json_body(model.root, 'data', jv='txt', first_assign=True)
         lines.extend(_indent(body))
 
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -286,7 +292,6 @@ class IecGenerator:
             lines.append(TAB + TAB + 'sv: ' + self._string_type + ';')
         lines.append(TAB + TAB + 'raw_ci, si: dint;')
         lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         lines.append(TAB + 'if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;')
         lines.append(TAB + 'raw_ci := si;')
 
@@ -295,7 +300,6 @@ class IecGenerator:
 
         lines.append(TAB + 'bytes[raw_ci] := 0;')
         lines.append(TAB + pfx + 'iecdata_to_jsonbytes := raw_ci - si;')
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -382,11 +386,9 @@ class IecGenerator:
             for vl in var_lines:
                 lines.append(TAB + TAB + vl)
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         body = self._struct_from_jsonbytes_body(st, 'data', 'bytes',
                                                  si_expr='start_index', ei_expr='end_index')
         lines.extend(_indent(body))
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -472,10 +474,8 @@ class IecGenerator:
             for vl in var_lines:
                 lines.append(TAB + TAB + vl)
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         body = self._struct_from_json_body(st, 'data', 'txt', 1)
         lines.extend(_indent(body))
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -523,12 +523,10 @@ class IecGenerator:
             for vl in var_lines:
                 lines.append(TAB + TAB + vl)
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
 
         body = self._struct_from_json_body(root, 'data', 'txt', 1)
         lines.extend(_indent(body))
 
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -908,7 +906,6 @@ class IecGenerator:
         for vl in var_lines_with_ei:
             lines.append(TAB + TAB + vl)
         lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         lines.append(TAB + 'if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;')
         lines.append(TAB + 'if end_index < 0 then ei := upper_bound(bytes, 1); else ei := end_index; end_if;')
 
@@ -916,6 +913,5 @@ class IecGenerator:
                                                 si_expr='si', ei_expr='ei')
         lines.extend(_indent(body))
 
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)

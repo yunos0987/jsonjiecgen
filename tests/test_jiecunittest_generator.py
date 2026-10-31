@@ -110,13 +110,47 @@ class TestTestJsonToData:
         # Assert
         assert 'jsontext_to_iecdata(txt, data);' in out
 
-    def test_st_delimiters(self):
-        # Fact: ST code is delimited by {st} and {end} markers
+    def test_no_st_start_marker(self):
+        # Fact: the st start marker is not emitted in the test code
         # Arrange / Act
         out = gen_test({'x': 1})
         # Assert
-        assert '{st}' in out
-        assert '{end}' in out
+        assert '{st}' not in out
+
+    def test_no_st_end_marker(self):
+        # Fact: the st end marker is not emitted in the test code
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert '{end}' not in out
+
+    def test_version_guard_condition(self):
+        # Fact: the test code has a jiepp condition rejecting Jiecc older than 9.2.0
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert '{#if _JIECC and (_JIECC_FULL_VER < 90200)}' in out
+
+    def test_version_guard_error(self):
+        # Fact: the test code has a jiepp error directive for old Jiecc
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert '{#error Generated code requires Jiecc 9.2.0 or later.}' in out
+
+    def test_version_guard_before_include(self):
+        # Fact: the version guard precedes the first include directive in the test code
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert out.index('_JIECC_FULL_VER < 90200') < out.index('{#include')
+
+    def test_version_guard_once(self):
+        # Fact: the version guard appears exactly once in the test code
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert out.count('_JIECC_FULL_VER < 90200') == 1
 
     def test_string_assertion(self):
         # Fact: string field value is asserted with EXPECT_EQ_STRING
