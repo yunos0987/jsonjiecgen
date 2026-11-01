@@ -120,7 +120,7 @@ class JiecUnitGenerator:
             lines.append('(* ' + command + ' *)')
         lines += [
             JIECC_VERSION_GUARD,
-            '{#include <jiecunit.txt>}',
+            '{#include <jiecunit.iec>}',
             '{#include <' + self._pou_filename + '>}',
         ]
         return '\n'.join(lines)

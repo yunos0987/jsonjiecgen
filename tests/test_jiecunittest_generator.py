@@ -36,7 +36,7 @@ class TestHeader:
         # Arrange / Act
         out = gen_test({'x': 1})
         # Assert
-        assert '{#include <jiecunit.txt>}' in out
+        assert '{#include <jiecunit.iec>}' in out
 
     def test_pou_include_uses_given_filename(self):
         # Fact: generated test file includes the given POU filename

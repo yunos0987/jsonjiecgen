@@ -203,6 +203,7 @@ python src/main.py jsons/samples/simple.json \
 ```
 
 `--test` を指定すると、生成コードに対応する jiecunit テストスイートを別ファイルに出力します。
+生成されたテストは `{#include <jiecunit.iec>}` を使うので、コンパイル時は `-I` に jiecunit のルートと `<jiecunit root>/sys` を渡してください（生成物冒頭のコマンドコメントと同じ指定です）。
 テストには `TEST_S(test_JsonRoot_jsontext_to_iecdata)` 等、入力値に基づくアサーションが含まれます。
 
 ### オプション指定例

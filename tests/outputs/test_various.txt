@@ -2,7 +2,7 @@
 {#if _JIECC and (_JIECC_FULL_VER < 90200)}
 {#error Generated code requires Jiecc 9.2.0 or later.}
 {#endif}
-{#include <jiecunit.txt>}
+{#include <jiecunit.iec>}
 {#include <various.txt>}
 
 {#ifdef _TEST_}
