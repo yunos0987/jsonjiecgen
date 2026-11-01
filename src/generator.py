@@ -36,6 +36,21 @@ def _read_src(name: str) -> str:
 
 _JSON_HELPERS = _read_src('json_helpers.txt')
 
+# Version guard emitted at the top of generated code (Jiecc 9.2.0 or later is required)
+JIECC_VERSION_GUARD = '\n'.join([
+    '{#if _JIECC and (_JIECC_FULL_VER < 90200)}',
+    '{#error Generated code requires Jiecc 9.2.0 or later.}',
+    '{#endif}',
+])
+
+# Byte literal constants for JSON structural characters
+_BYTE_OPEN_BRACE  = 'byte#123'  # {
+_BYTE_CLOSE_BRACE = 'byte#125'  # }
+_BYTE_OPEN_BRACK  = 'byte#91'   # [
+_BYTE_CLOSE_BRACK = 'byte#93'   # ]
+_BYTE_DQUOTE      = 'byte#34'   # "
+_BYTE_COMMA       = 'byte#44'   # ,
+
 
 def _indent(lines: list, n: int = 1) -> list:
     prefix = TAB * n
@@ -83,6 +98,7 @@ class IecGenerator:
     def generate(self, model: TypeModel) -> str:
         self._string_type = model.string_type
         parts = []
+        parts.append(JIECC_VERSION_GUARD)
         parts.append(self._gen_type_defs(model))
         parts.append(_JSON_HELPERS)
         parts.append(self._gen_per_struct_extractors(model))
@@ -194,12 +210,10 @@ class IecGenerator:
             lines.append(TAB + 'var_temp')
             lines.append(TAB + TAB + 'sv: ' + self._string_type + ';')
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
 
         body = self._struct_to_json_body(model.root, 'data', jv='txt', first_assign=True)
         lines.extend(_indent(body))
 
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -278,7 +292,6 @@ class IecGenerator:
             lines.append(TAB + TAB + 'sv: ' + self._string_type + ';')
         lines.append(TAB + TAB + 'raw_ci, si: dint;')
         lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         lines.append(TAB + 'if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;')
         lines.append(TAB + 'raw_ci := si;')
 
@@ -287,17 +300,16 @@ class IecGenerator:
 
         lines.append(TAB + 'bytes[raw_ci] := 0;')
         lines.append(TAB + pfx + 'iecdata_to_jsonbytes := raw_ci - si;')
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
     def _struct_to_jsonbytes_body(self, st: StructType, path: str, json_var: str = 'dat') -> list:
-        lines = [json_var + "[raw_ci] := byte#123;", "raw_ci := raw_ci + 1;"]
+        lines = [json_var + "[raw_ci] := " + _BYTE_OPEN_BRACE + ";", "raw_ci := raw_ci + 1;"]
         for i, f in enumerate(st.fields):
             sep = '' if i == 0 else ','
             lines.append("raw_ci := json_bytes_insert_text(dat:=" + json_var + ", index:=raw_ci, str:='" + sep + '"' + f.name + '":' + "');")
             lines.extend(self._field_to_jsonbytes(f.type, path + '.' + f.name, json_var))
-        lines.append(json_var + "[raw_ci] := byte#125;")
+        lines.append(json_var + "[raw_ci] := " + _BYTE_CLOSE_BRACE + ";")
         lines.append("raw_ci := raw_ci + 1;")
         return lines
 
@@ -313,9 +325,9 @@ class IecGenerator:
     def _scalar_to_jsonbytes(self, t: ScalarType, path: str, json_var: str = 'dat') -> list:
         if t.json_type == 'string':
             return [
-                json_var + "[raw_ci] := byte#34;", "raw_ci := raw_ci + 1;",
+                json_var + "[raw_ci] := " + _BYTE_DQUOTE + ";", "raw_ci := raw_ci + 1;",
                 'raw_ci := json_bytes_insert_text(dat:=' + json_var + ', index:=raw_ci, str:=json_escape(' + path + '));',
-                json_var + "[raw_ci] := byte#34;", "raw_ci := raw_ci + 1;",
+                json_var + "[raw_ci] := " + _BYTE_DQUOTE + ";", "raw_ci := raw_ci + 1;",
             ]
         if t.json_type == 'boolean':
             return [
@@ -334,17 +346,17 @@ class IecGenerator:
     def _array_to_jsonbytes(self, t: ArrayType, path: str, idx_parts: list = None, json_var: str = 'dat') -> list:
         if idx_parts is None:
             idx_parts = []
-        lines = [json_var + "[raw_ci] := byte#91;", "raw_ci := raw_ci + 1;"]
+        lines = [json_var + "[raw_ci] := " + _BYTE_OPEN_BRACK + ";", "raw_ci := raw_ci + 1;"]
         for idx in range(t.size):
             if idx > 0:
-                lines.append(json_var + "[raw_ci] := byte#44;")
+                lines.append(json_var + "[raw_ci] := " + _BYTE_COMMA + ";")
                 lines.append("raw_ci := raw_ci + 1;")
             new_parts = idx_parts + [str(idx)]
             if isinstance(t.element_type, ArrayType):
                 lines.extend(self._array_to_jsonbytes(t.element_type, path, new_parts, json_var))
             else:
                 lines.extend(self._field_to_jsonbytes(t.element_type, path + '[' + ', '.join(new_parts) + ']', json_var))
-        lines.append(json_var + "[raw_ci] := byte#93;")
+        lines.append(json_var + "[raw_ci] := " + _BYTE_CLOSE_BRACK + ";")
         lines.append("raw_ci := raw_ci + 1;")
         return lines
 
@@ -374,11 +386,9 @@ class IecGenerator:
             for vl in var_lines:
                 lines.append(TAB + TAB + vl)
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         body = self._struct_from_jsonbytes_body(st, 'data', 'bytes',
                                                  si_expr='start_index', ei_expr='end_index')
         lines.extend(_indent(body))
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -429,7 +439,7 @@ class IecGenerator:
             elif isinstance(f.type, StructType):
                 lines.append('// ' + f.name + ': struct')
                 lines.append('json_bytes_find_block(dat:=' + json_var + ', key:=key_' + f.name + ''
-                              + ', open_byte:=byte#123, close_byte:=byte#125'
+                              + ', open_byte:=' + _BYTE_OPEN_BRACE + ', close_byte:=' + _BYTE_CLOSE_BRACE
                               + ', start_index:=' + si_expr + ', end_index:=' + ei_expr
                               + ', block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);')
                 lines.append('if not eno then return; end_if;')
@@ -442,7 +452,7 @@ class IecGenerator:
                 v1_bei = 'jblk1_bei'
                 lines.append('// ' + f.name + ': array')
                 lines.append('json_bytes_find_block(dat:=' + json_var + ', key:=key_' + f.name + ''
-                              + ', open_byte:=byte#91, close_byte:=byte#93'
+                              + ', open_byte:=' + _BYTE_OPEN_BRACK + ', close_byte:=' + _BYTE_CLOSE_BRACK
                               + ', start_index:=' + si_expr + ', end_index:=' + ei_expr
                               + ', block_start_index:=' + v1_bsi + ', block_end_index:=' + v1_bei + ', eno=>eno);')
                 lines.append('if not eno then return; end_if;')
@@ -464,10 +474,8 @@ class IecGenerator:
             for vl in var_lines:
                 lines.append(TAB + TAB + vl)
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         body = self._struct_from_json_body(st, 'data', 'txt', 1)
         lines.extend(_indent(body))
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -515,12 +523,10 @@ class IecGenerator:
             for vl in var_lines:
                 lines.append(TAB + TAB + vl)
             lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
 
         body = self._struct_from_json_body(root, 'data', 'txt', 1)
         lines.extend(_indent(body))
 
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)
 
@@ -900,7 +906,6 @@ class IecGenerator:
         for vl in var_lines_with_ei:
             lines.append(TAB + TAB + vl)
         lines.append(TAB + 'end_var')
-        lines.append('(*{st}*)')
         lines.append(TAB + 'if start_index < 0 then si := lower_bound(bytes, 1); else si := start_index; end_if;')
         lines.append(TAB + 'if end_index < 0 then ei := upper_bound(bytes, 1); else ei := end_index; end_if;')
 
@@ -908,6 +913,5 @@ class IecGenerator:
                                                 si_expr='si', ei_expr='ei')
         lines.extend(_indent(body))
 
-        lines.append('(*{end}*)')
         lines.append('end_function')
         return '\n'.join(lines)

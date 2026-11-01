@@ -37,8 +37,8 @@ With testing (--test):
 ## 必要環境
 
 - Python 3.10 以降
-- [Jiecc](https://www.graviness.com/iec_61131-3/jiecc.html) — 生成コードのコンパイルに必要
-- [jiecunit](https://github.com/yunos0987/jiecunit) — 生成コードの単体テストを行う場合に必要
+- [Jiecc](https://www.graviness.com/iec_61131-3/jiecc.html) 9.2.0 以降 — 生成コードのコンパイルに必要（生成コードの先頭に、9.2.0 未満では `{#error}` で止まるバージョンガードを出力します）
+- [jiecunit](https://github.com/yunos0987/jiecunit) 6.0.0 以降 — 生成テストコード（`--test`）を使う場合に必要
 
 ## インストール
 
@@ -203,6 +203,7 @@ python src/main.py jsons/samples/simple.json \
 ```
 
 `--test` を指定すると、生成コードに対応する jiecunit テストスイートを別ファイルに出力します。
+生成されたテストは `{#include <jiecunit.iec>}` を使うので、コンパイル時は `-I` に jiecunit のルートと `<jiecunit root>/sys` を渡してください（生成物冒頭のコマンドコメントと同じ指定です）。
 テストには `TEST_S(test_JsonRoot_jsontext_to_iecdata)` 等、入力値に基づくアサーションが含まれます。
 
 ### オプション指定例
@@ -371,6 +372,10 @@ do
     -o tests/outputs/${stem}.txt --test tests/outputs/test_${stem}.txt
 done
 ```
+
+## 開発・変更履歴
+
+開発への参加方法とバージョン管理は [CONTRIBUTING.md](CONTRIBUTING.md)、リリースごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 ## ライセンス
 

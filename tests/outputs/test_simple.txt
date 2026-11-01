@@ -1,5 +1,8 @@
 (* $ jiecc ./tests/outputs/test_simple.txt -D_TEST_ -I./tests/outputs -I<jiecunit root> -I<jiecunit root>/sys -o ./test_simple.xml -t omron *)
-{#include <jiecunit.txt>}
+{#if _JIECC and (_JIECC_FULL_VER < 90200)}
+{#error Generated code requires Jiecc 9.2.0 or later.}
+{#endif}
+{#include <jiecunit.iec>}
 {#include <simple.txt>}
 
 {#ifdef _TEST_}
@@ -43,7 +46,6 @@ TEST_S(test_Simple_jsontext_to_iecdata)
 		txt6: string[JSON_STRING_SIZE];
 		data6: Simple_t;
 	end
-	{st}
 	txt := '{"name":"sensor1","value":3.14,"count":42,"active":true}';
 	Simple_jsontext_to_iecdata(txt, data);
 	EXPECT_EQ_STRING('sensor1', data.name);
@@ -68,7 +70,6 @@ TEST_S(test_Simple_jsontext_to_iecdata)
 	txt6 := '{"name":"","value":0.0,"count":-42,"active":false}';
 	Simple_jsontext_to_iecdata(txt6, data6);
 	EXPECT_EQ_DINT(-42, data6.count);
-	{end}
 END_TEST_S
 
 TEST_S(test_Simple_iecdata_to_jsontext)
@@ -95,7 +96,6 @@ TEST_S(test_Simple_iecdata_to_jsontext)
 		txt6: string[JSON_STRING_SIZE];
 		data6_rt: Simple_t;
 	end
-	{st}
 	data.name := 'sensor1';
 	data.value := 3.14;
 	data.count := 42;
@@ -130,7 +130,6 @@ TEST_S(test_Simple_iecdata_to_jsontext)
 	Simple_iecdata_to_jsontext(data6, txt6);
 	Simple_jsontext_to_iecdata(txt6, data6_rt);
 	EXPECT_EQ_DINT(-42, data6_rt.count);
-	{end}
 END_TEST_S
 
 TEST_S(test_Simple_jsonbytes_to_iecdata)
@@ -139,7 +138,6 @@ TEST_S(test_Simple_jsonbytes_to_iecdata)
 		bytes: array[0..JSON_STRING_SIZE] of byte;
 		data_rt: Simple_t;
 	end
-	{st}
 	data.name := 'sensor1';
 	data.value := 3.14;
 	data.count := 42;
@@ -150,7 +148,6 @@ TEST_S(test_Simple_jsonbytes_to_iecdata)
 	EXPECT_NEAR(3.14, data_rt.value, 0.001);
 	EXPECT_EQ_DINT(42, data_rt.count);
 	EXPECT_TRUE(data_rt.active);
-	{end}
 END_TEST_S
 
 TEST_S(test_Simple_iecdata_to_jsonbytes)
@@ -159,7 +156,6 @@ TEST_S(test_Simple_iecdata_to_jsonbytes)
 		bytes: array[0..JSON_STRING_SIZE] of byte;
 		data_rt: Simple_t;
 	end
-	{st}
 	data.name := 'sensor1';
 	data.value := 3.14;
 	data.count := 42;
@@ -170,14 +166,12 @@ TEST_S(test_Simple_iecdata_to_jsonbytes)
 	EXPECT_NEAR(3.14, data_rt.value, 0.001);
 	EXPECT_EQ_DINT(42, data_rt.count);
 	EXPECT_TRUE(data_rt.active);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_char_from_asciicharcode)
 	var
 		res: string[8];
 	end
-	{st}
 	res := json_char_from_asciicharcode(0);
 	EXPECT_EQ_STRING('$00', res);
 	res := json_char_from_asciicharcode(1);
@@ -434,14 +428,12 @@ TEST_S(test_json_char_from_asciicharcode)
 	EXPECT_EQ_STRING('~', res);
 	res := json_char_from_asciicharcode(127);
 	EXPECT_EQ_STRING('$7f', res);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_asciicharcode)
 	var
 		cd: dint;
 	end
-	{st}
 	cd := json_asciicharcode('$08');
 	EXPECT_EQ_DINT(8, cd);
 	cd := json_asciicharcode('$t');
@@ -646,7 +638,6 @@ TEST_S(test_json_asciicharcode)
 	EXPECT_EQ_DINT(126, cd);
 	cd := json_asciicharcode('$00');
 	EXPECT_EQ_DINT(0, cd);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_bytes_insert_text)
@@ -654,7 +645,6 @@ TEST_S(test_json_bytes_insert_text)
 		raw: array[0..9] of byte;
 		pos: dint;
 	end
-	{st}
 	pos := json_bytes_insert_text(dat:=raw, index:=0, str:='AB');
 	EXPECT_EQ_DINT(2, pos);
 	EXPECT_EQ_DINT(65, byte_to_dint(raw[0]));
@@ -663,7 +653,6 @@ TEST_S(test_json_bytes_insert_text)
 	EXPECT_EQ_DINT(4, pos);
 	EXPECT_EQ_DINT(123, byte_to_dint(raw[2]));
 	EXPECT_EQ_DINT(125, byte_to_dint(raw[3]));
-	{end}
 END_TEST_S
 
 
@@ -677,9 +666,8 @@ TEST_S(test_json_bytes_find_key)
 		idx: dint;
 		ok: bool;
 	end
-	{st}
 	// basic: single integer field
-	// {"x":42} - key 'x' value starts at byte 5 ('4' = 52)
+	// JSON {"x":42} - key 'x' value starts at byte 5 ('4' = 52)
 	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"x":42}', eno=>ok);
 	raw[wp] := 0;
 	idx := json_bytes_find_key(dat:=raw, key:=key_x, start_index:=0, end_index:=-1, eno=>ok);
@@ -692,7 +680,7 @@ TEST_S(test_json_bytes_find_key)
 	EXPECT_EQ_DINT(11, idx);
 	EXPECT_EQ_DINT(50, byte_to_dint(raw[idx]));
 	// nested: key inside nested object is not matched; top-level key is
-	// {"a":{"key":1},"key":2} - top-level 'key' value at byte 21 ('2' = 50)
+	// JSON {"a":{"key":1},"key":2} - top-level 'key' value at byte 21 ('2' = 50)
 	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"a":{"key":1},"key":2}', eno=>ok);
 	raw[wp] := 0;
 	idx := json_bytes_find_key(dat:=raw, key:=key_key, start_index:=0, end_index:=-1, eno=>ok);
@@ -703,14 +691,12 @@ TEST_S(test_json_bytes_find_key)
 	raw[wp] := 0;
 	idx := json_bytes_find_key(dat:=raw, key:=key_x, start_index:=0, end_index:=-1, eno=>ok);
 	EXPECT_EQ_DINT(-1, idx);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_escape)
 	var
 		res: string[JSON_STRING_SIZE];
 	end
-	{st}
 	res := json_escape('"');
 	EXPECT_EQ_STRING('\"', res);
 	res := json_escape('\');
@@ -737,7 +723,6 @@ TEST_S(test_json_escape)
 	EXPECT_EQ_STRING('a\nb', res);
 	res := json_escape('a"b$nc');
 	EXPECT_EQ_STRING('a\"b\nc', res);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_find_key)
@@ -745,7 +730,6 @@ TEST_S(test_json_find_key)
 		src: string[JSON_STRING_SIZE];
 		pos: dint;
 	end
-	{st}
 	// basic: key found at depth 1
 	src := '{"key":1}';
 	pos := json_find_key(src, 'key');
@@ -762,7 +746,6 @@ TEST_S(test_json_find_key)
 	src := '{"other":1}';
 	pos := json_find_key(src, 'key');
 	EXPECT_EQ_DINT(0, pos);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_find_block)
@@ -771,7 +754,6 @@ TEST_S(test_json_find_block)
 		blk: string[JSON_STRING_SIZE];
 		ok: bool;
 	end
-	{st}
 	// basic: extract object block
 	src := '{"key":{"a":1},"other":2}';
 	json_find_block(dat:=src, key:='key', open_ch:='{', close_ch:='}', block:=blk, eno=>ok);
@@ -796,7 +778,6 @@ TEST_S(test_json_find_block)
 	ok := true;
 	json_find_block(dat:=src, key:='missing', open_ch:='{', close_ch:='}', block:=blk, eno=>ok);
 	EXPECT_FALSE(ok);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_extract_scalar)
@@ -805,7 +786,6 @@ TEST_S(test_json_extract_scalar)
 		sv: string[JSON_STRING_SIZE];
 		ok: bool;
 	end
-	{st}
 	// extract integer value delimited by ','
 	src := '{"x":42,"y":1}';
 	json_extract_scalar(dat:=src, key:='x', sv:=sv, eno=>ok);
@@ -835,7 +815,6 @@ TEST_S(test_json_extract_scalar)
 	ok := true;
 	json_extract_scalar(dat:=src, key:='missing', sv:=sv, eno=>ok);
 	EXPECT_FALSE(ok);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_bytes_find_block)
@@ -849,7 +828,6 @@ TEST_S(test_json_bytes_find_block)
 		wp: dint;
 		ok: bool;
 	end
-	{st}
 	// extract object block: verify indices point to '{'/'}' and content via json_bytes_to_str
 	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"pos":{"x":1},"y":2}', eno=>ok);
 	raw[wp] := 0;
@@ -870,7 +848,6 @@ TEST_S(test_json_bytes_find_block)
 	ok := true;
 	json_bytes_find_block(dat:=raw, key:=key_missing, open_byte:=byte#123, close_byte:=byte#125, start_index:=0, end_index:=127, block_start_index:=bsi, block_end_index:=bei, eno=>ok);
 	EXPECT_FALSE(ok);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_bytes_extract_scalar)
@@ -885,7 +862,6 @@ TEST_S(test_json_bytes_extract_scalar)
 		wp: dint;
 		ok: bool;
 	end
-	{st}
 	// extract integer value delimited by ','
 	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='{"x":42,"y":1}', eno=>ok);
 	raw[wp] := 0;
@@ -912,7 +888,6 @@ TEST_S(test_json_bytes_extract_scalar)
 	ok := true;
 	json_bytes_extract_scalar(dat:=raw, key:=key_missing, start_index:=0, end_index:=127, sv:=sv, eno=>ok);
 	EXPECT_FALSE(ok);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_bytes_to_str)
@@ -922,7 +897,6 @@ TEST_S(test_json_bytes_to_str)
 		wp: dint;
 		ok: bool;
 	end
-	{st}
 	// convert byte range to string
 	wp := json_bytes_insert_text(dat:=raw, index:=0, str:='hello', eno=>ok);
 	json_bytes_to_str(dat:=raw, start_index:=0, end_index:=wp-1, sv:=sv, eno=>ok);
@@ -937,7 +911,6 @@ TEST_S(test_json_bytes_to_str)
 	json_bytes_to_str(dat:=raw, start_index:=0, end_index:=wp-1, sv:=sv, eno=>ok);
 	EXPECT_TRUE(ok);
 	EXPECT_EQ_STRING('{"x":1}', sv);
-	{end}
 END_TEST_S
 
 TEST_S(test_json_unescape)
@@ -945,7 +918,6 @@ TEST_S(test_json_unescape)
 		res: string[JSON_STRING_SIZE];
 		ok: bool;
 	end
-	{st}
 	// --- Single escape sequences ---
 	res := json_unescape('\"');
 	EXPECT_EQ_STRING('"', res);
@@ -993,5 +965,4 @@ TEST_S(test_json_unescape)
 	EXPECT_FALSE(ok);
 	res := json_unescape(in:='\u0080', eno=>ok); // \u: non-ASCII code (128)
 	EXPECT_FALSE(ok);
-	{end}
 END_TEST_S
