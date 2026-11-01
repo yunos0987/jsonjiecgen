@@ -32,3 +32,6 @@
 
 # 構成
 - /tests/inputsのテスト数に変更があった場合、/tests/outputs/test_all.txtを見直す。
+
+# バージョン
+- バージョンは `src/config.py` の `VERSION`。更新は `release vX.Y.Z` の独立コミットでのみ行い、手順は [CONTRIBUTING.md](CONTRIBUTING.md) のバージョン管理節に従う。
