@@ -13,6 +13,7 @@
 - 小数点の無い指数表記の数値（`1e3` など）を REAL / LREAL のフィールドに読むと、jier では 0.0 になっていました。IEC の実数の表記は指数の前に小数部が要るので、新しい補助関数 `json_real_text` で `1.0e3` の形に直してから `string_to_lreal` / `string_to_real` に渡します。
 - 補助関数のテスト `test_json_extract_scalar` が、深さ 2 のキー（`[{"x":3}]` の `x`）を見つかるものとして検査していた誤りを直しました。`json_extract_scalar` は深さ 1 のキーだけを探します。
 - `tests/inputs` の 10 件の JSON から生成したテストコードは、jier（Jiecc 9.6.0、JiecUnit 8.0.0）で全件合格します。
+- README.md の「必要環境」に、確認した Jiecc と JiecUnit の版を書きました（`-t omron` のコンパイルは Jiecc 9.4.0・9.6.0 と JiecUnit 6.0.0・7.0.0・8.0.0、jier での実行は Jiecc 9.6.0 と JiecUnit 8.0.0）。
 
 ## [0.1.0] - 2026-11-01
 
