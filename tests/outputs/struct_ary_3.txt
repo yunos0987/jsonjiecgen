@@ -294,9 +294,9 @@ function json_find_block
 	// Writes the block into block. Sets eno=false if key not found or brackets unmatched.
 	pos := json_find_key(dat:=dat, key:=key);
 	if pos = 0 then eno := false; return; end_if;
-	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	pos := pos + len(key) + 3;  // skip '"key":'
 	qos := pos;
-	slen := uint_to_dint(len(dat));
+	slen := len(dat);
 	depth := 1;
 	while depth > 0 do
 		qos := qos + 1;
@@ -329,8 +329,8 @@ function json_extract_scalar
 	// Writes the value into sv. Sets eno=false if key not found or no delimiter.
 	pos := json_find_key(dat:=dat, key:=key);
 	if pos = 0 then eno := false; return; end_if;
-	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
-	slen := uint_to_dint(len(dat));
+	pos := pos + len(key) + 3;  // skip '"key":'
+	slen := len(dat);
 	tail := mid(dat, dint_to_uint(slen - pos + 1), dint_to_uint(pos));
 	qp := find(tail, ',');
 	if qp = 0 then qp := find(tail, '}'); end_if;
@@ -513,6 +513,20 @@ function json_unescape: string[JSON_STRING_SIZE]
 	json_unescape := result;
 end_function
 
+function json_real_text: string[JSON_STRING_SIZE]
+	var_input in: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		ep: dint;
+	end_var
+	// JSON allows an exponent without a fraction ('1e3'); IEC real text needs one ('1.0e3').
+	json_real_text := in;
+	if find(in, '.') > 0 then return; end_if;
+	ep := find(in, 'e');
+	if ep = 0 then ep := find(in, 'E'); end_if;
+	if ep = 0 then return; end_if;
+	json_real_text := insert(in, '.0', dint_to_uint(ep - 1));
+end_function
+
 {#endif}
 function private_StructAry3_units_body_pos_t_jsonbytes_to_iecdata
 	_DEFINE_ENENO_()
@@ -528,11 +542,11 @@ function private_StructAry3_units_body_pos_t_jsonbytes_to_iecdata
 	// x: lreal
 	json_bytes_extract_scalar(dat:=bytes, key:=key_x, start_index:=start_index, end_index:=end_index, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.x := string_to_lreal(sv);
+	data.x := string_to_lreal(json_real_text(in:=sv));
 	// y: lreal
 	json_bytes_extract_scalar(dat:=bytes, key:=key_y, start_index:=start_index, end_index:=end_index, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.y := string_to_lreal(sv);
+	data.y := string_to_lreal(json_real_text(in:=sv));
 end_function
 function private_StructAry3_units_body_pos_t_jsontext_to_iecdata
 	_DEFINE_ENENO_()
@@ -544,11 +558,11 @@ function private_StructAry3_units_body_pos_t_jsontext_to_iecdata
 	// x: lreal
 	json_extract_scalar(dat:=txt, key:='x', sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.x := string_to_lreal(sv);
+	data.x := string_to_lreal(json_real_text(in:=sv));
 	// y: lreal
 	json_extract_scalar(dat:=txt, key:='y', sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.y := string_to_lreal(sv);
+	data.y := string_to_lreal(json_real_text(in:=sv));
 end_function
 function private_StructAry3_units_body_t_jsonbytes_to_iecdata
 	_DEFINE_ENENO_()
@@ -590,7 +604,7 @@ function private_StructAry3_units_body_t_jsontext_to_iecdata
 	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_in_out data: StructAry3_units_body_t; end_var
 	var_temp
-		pos, qos: dint;
+		pos, qos, slen: dint;
 		pos1: dint;
 		jblk1: string[JSON_STRING_SIZE];
 		jblk1_len: dint;
@@ -607,7 +621,8 @@ function private_StructAry3_units_body_t_jsontext_to_iecdata
 	if pos = 0 then eno := false; return; end_if;
 	pos := pos + 9;
 	qos := pos;
-	while qos <= uint_to_dint(len(txt)) do
+	slen := len(txt);
+	while qos <= slen do
 		if mid(txt, 1, dint_to_uint(qos)) = '\' then qos := qos + 2;
 		elsif mid(txt, 1, dint_to_uint(qos)) = '"' then exit;
 		else qos := qos + 1;
@@ -804,7 +819,7 @@ function StructAry3_jsontext_to_iecdata
 	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_in_out data: StructAry3_t; end_var
 	var_temp
-		pos, qos, qp: dint;
+		pos, qos, slen, qp: dint;
 		pos1, pos2: dint;
 		jblk1: string[JSON_STRING_SIZE];
 		jblk1_len: dint;

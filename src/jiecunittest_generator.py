@@ -98,7 +98,7 @@ class JiecUnitGenerator:
             'test_json_escape', 'test_json_find_block',
             'test_json_extract_scalar', 'test_json_bytes_find_block',
             'test_json_bytes_extract_scalar', 'test_json_bytes_to_str',
-            'test_json_unescape',
+            'test_json_unescape', 'test_json_real_text',
         ]
 
         parts = [

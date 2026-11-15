@@ -23,7 +23,8 @@ DEFINE_CONFIGURATION(
 		test_json_bytes_find_block,
 		test_json_bytes_extract_scalar,
 		test_json_bytes_to_str,
-		test_json_unescape
+		test_json_unescape,
+		test_json_real_text
 	)
 )
 {#undef _TEST_}
@@ -800,11 +801,16 @@ TEST_S(test_json_extract_scalar)
 	json_extract_scalar(dat:=src, key:='y', sv:=sv, eno=>ok);
 	EXPECT_TRUE(ok);
 	EXPECT_EQ_STRING('7', sv);
-	// extract value delimited by ']'
-	src := '[{"x":3}]';
+	// extract value delimited by ']' when no ',' or '}' follows
+	src := '{"x":3]';
 	json_extract_scalar(dat:=src, key:='x', sv:=sv, eno=>ok);
 	EXPECT_TRUE(ok);
 	EXPECT_EQ_STRING('3', sv);
+	// key below depth 1 is not found: eno = false
+	ok := true;
+	src := '[{"x":3}]';
+	json_extract_scalar(dat:=src, key:='x', sv:=sv, eno=>ok);
+	EXPECT_FALSE(ok);
 	// extract float value
 	src := '{"v":3.14}';
 	json_extract_scalar(dat:=src, key:='v', sv:=sv, eno=>ok);
@@ -969,6 +975,24 @@ TEST_S(test_json_unescape)
 	EXPECT_FALSE(ok);
 	res := json_unescape(in:='\u0080', eno=>ok); // \u: non-ASCII code (128)
 	EXPECT_FALSE(ok);
+END_TEST_S
+
+TEST_S(test_json_real_text)
+	var
+		res: string[JSON_STRING_SIZE];
+	end_var
+	// exponent without fraction gets '.0' before the exponent
+	res := json_real_text(in:='1e3');
+	EXPECT_EQ_STRING('1.0e3', res);
+	res := json_real_text(in:='-25E-1');
+	EXPECT_EQ_STRING('-25.0E-1', res);
+	// text with a fraction or without an exponent is unchanged
+	res := json_real_text(in:='1.5e2');
+	EXPECT_EQ_STRING('1.5e2', res);
+	res := json_real_text(in:='42');
+	EXPECT_EQ_STRING('42', res);
+	// the result converts to the expected value
+	EXPECT_NEAR(1000.0, string_to_lreal(json_real_text(in:='1e3')), 0.001);
 END_TEST_S
 
 {#endif}

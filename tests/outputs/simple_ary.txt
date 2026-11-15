@@ -279,9 +279,9 @@ function json_find_block
 	// Writes the block into block. Sets eno=false if key not found or brackets unmatched.
 	pos := json_find_key(dat:=dat, key:=key);
 	if pos = 0 then eno := false; return; end_if;
-	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	pos := pos + len(key) + 3;  // skip '"key":'
 	qos := pos;
-	slen := uint_to_dint(len(dat));
+	slen := len(dat);
 	depth := 1;
 	while depth > 0 do
 		qos := qos + 1;
@@ -314,8 +314,8 @@ function json_extract_scalar
 	// Writes the value into sv. Sets eno=false if key not found or no delimiter.
 	pos := json_find_key(dat:=dat, key:=key);
 	if pos = 0 then eno := false; return; end_if;
-	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
-	slen := uint_to_dint(len(dat));
+	pos := pos + len(key) + 3;  // skip '"key":'
+	slen := len(dat);
 	tail := mid(dat, dint_to_uint(slen - pos + 1), dint_to_uint(pos));
 	qp := find(tail, ',');
 	if qp = 0 then qp := find(tail, '}'); end_if;
@@ -496,6 +496,20 @@ function json_unescape: string[JSON_STRING_SIZE]
 		ci := ci + 1;
 	end_while;
 	json_unescape := result;
+end_function
+
+function json_real_text: string[JSON_STRING_SIZE]
+	var_input in: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		ep: dint;
+	end_var
+	// JSON allows an exponent without a fraction ('1e3'); IEC real text needs one ('1.0e3').
+	json_real_text := in;
+	if find(in, '.') > 0 then return; end_if;
+	ep := find(in, 'e');
+	if ep = 0 then ep := find(in, 'E'); end_if;
+	if ep = 0 then return; end_if;
+	json_real_text := insert(in, '.0', dint_to_uint(ep - 1));
 end_function
 
 {#endif}
@@ -734,7 +748,7 @@ function SimpleAry_jsontext_to_iecdata
 	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_in_out data: SimpleAry_t; end_var
 	var_temp
-		pos, qos, qp: dint;
+		pos, qos, slen, qp: dint;
 		pos1: dint;
 		jblk1: string[JSON_STRING_SIZE];
 		jblk1_len: dint;
@@ -802,25 +816,25 @@ function SimpleAry_jsontext_to_iecdata
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[0] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.floats[0] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// [1]
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[1] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.floats[1] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// [2]
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[2] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.floats[2] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// [3]
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.floats[3] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.floats[3] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// strings: array
 	json_find_block(dat:=txt, key:='strings', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
@@ -1017,7 +1031,7 @@ function SimpleAry_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.floats[0] := string_to_lreal(sv);
+	data.floats[0] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// [1]
 	qos := pos1;
@@ -1027,7 +1041,7 @@ function SimpleAry_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.floats[1] := string_to_lreal(sv);
+	data.floats[1] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// [2]
 	qos := pos1;
@@ -1037,7 +1051,7 @@ function SimpleAry_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.floats[2] := string_to_lreal(sv);
+	data.floats[2] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// [3]
 	qos := pos1;
@@ -1047,7 +1061,7 @@ function SimpleAry_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.floats[3] := string_to_lreal(sv);
+	data.floats[3] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// strings: array
 	json_bytes_find_block(dat:=bytes, key:=key_strings, open_byte:=byte#91, close_byte:=byte#93, start_index:=si, end_index:=ei, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
