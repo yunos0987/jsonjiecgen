@@ -10,6 +10,10 @@ type
 		active: bool;
 	end_struct;
 end_type
+// Guard: emit the shared helpers once when several generated files are compiled together
+{#ifndef JSON_HELPERS_DEFINED}
+{#define JSON_HELPERS_DEFINED 1}
+
 {#ifndef JSON_STRING_SIZE}
 	{#define JSON_STRING_SIZE 1024}
 {#endif}
@@ -122,6 +126,26 @@ function json_char_from_asciicharcode: string[8]
 	end_case;
 end_function
 
+// Defined before json_bytes_insert_text, which calls it (jier needs callees first)
+function json_asciicharcode: dint
+	_DEFINE_ENENO_()
+	var_input in: string[2]; end_var
+	var_temp
+		printable: string[128] := ' !"#$$%&$27()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+	end_var
+	json_asciicharcode := find(printable, in) + 31;
+	if json_asciicharcode <= 31 then
+		if      in = '$08' then json_asciicharcode := 8;
+		elsif   in = '$t'  then json_asciicharcode := 9;
+		elsif   in = '$n'  then json_asciicharcode := 10;
+		elsif   in = '$0b' then json_asciicharcode := 11;
+		elsif   in = '$0c' then json_asciicharcode := 12;
+		elsif   in = '$r'  then json_asciicharcode := 13;
+		else json_asciicharcode := 0;
+		end_if;
+	end_if;
+end_function
+
 function json_bytes_insert_text: dint
 	_DEFINE_ENENO_()
 	var_in_out dat: array[*] of byte; end_var
@@ -144,25 +168,6 @@ function json_bytes_insert_text: dint
 		ci := ci + 1;
 	end_while;
 	json_bytes_insert_text := wp;
-end_function
-
-function json_asciicharcode: dint
-	_DEFINE_ENENO_()
-	var_input in: string[2]; end_var
-	var_temp
-		printable: string[128] := ' !"#$$%&$27()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
-	end_var
-	json_asciicharcode := find(printable, in) + 31;
-	if json_asciicharcode <= 31 then
-		if      in = '$08' then json_asciicharcode := 8;
-		elsif   in = '$t'  then json_asciicharcode := 9;
-		elsif   in = '$n'  then json_asciicharcode := 10;
-		elsif   in = '$0b' then json_asciicharcode := 11;
-		elsif   in = '$0c' then json_asciicharcode := 12;
-		elsif   in = '$r'  then json_asciicharcode := 13;
-		else json_asciicharcode := 0;
-		end_if;
-	end_if;
 end_function
 
 function json_find_key : dint
@@ -492,7 +497,8 @@ function json_unescape: string[JSON_STRING_SIZE]
 	end_while;
 	json_unescape := result;
 end_function
-	
+
+{#endif}
 function SimpleSchema_iecdata_to_jsontext
 	_DEFINE_ENENO_()
 	var_in_out data: SimpleSchema_t; end_var

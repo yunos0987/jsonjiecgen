@@ -1,3 +1,7 @@
+// Guard: emit the shared helper tests once when several generated test files are compiled together
+{#ifndef JSON_TEST_HELPERS_DEFINED}
+{#define JSON_TEST_HELPERS_DEFINED 1}
+
 TEST_S(test_json_char_from_asciicharcode)
 	var
 		res: string[8];
@@ -796,3 +800,5 @@ TEST_S(test_json_unescape)
 	res := json_unescape(in:='\u0080', eno=>ok); // \u: non-ASCII code (128)
 	EXPECT_FALSE(ok);
 END_TEST_S
+
+{#endif}

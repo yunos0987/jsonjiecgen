@@ -65,8 +65,25 @@ class TestHeader:
         # Arrange / Act
         out = gen_test({'x': 1})
         # Assert
-        assert "'test_JsonRoot_jsontext_to_iecdata'" in out
-        assert "'test_JsonRoot_iecdata_to_jsontext'" in out
+        assert '\t\ttest_JsonRoot_jsontext_to_iecdata,\n' in out
+        assert '\t\ttest_JsonRoot_iecdata_to_jsontext,\n' in out
+
+    def test_test_names_are_bare_identifiers(self):
+        # Fact: the test name list holds bare identifiers, not quoted string literals
+        # Arrange
+        out = gen_test({'x': 1})
+        # Act
+        block = out.split('_JIEC_TESTNAMES_LIST_(', 1)[1].split(')', 1)[0]
+        # Assert
+        assert "'" not in block
+
+    def test_helper_tests_wrapped_in_include_guard(self):
+        # Fact: the shared helper tests sit inside a JSON_TEST_HELPERS_DEFINED guard
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert out.index('{#ifndef JSON_TEST_HELPERS_DEFINED}') < out.index('TEST_S(test_json_char_from_asciicharcode)')
+        assert out.rstrip('\n').endswith('{#endif}')
 
 
 # ---------------------------------------------------------------------------
@@ -480,8 +497,8 @@ class TestEscapeBlock:
         # Arrange / Act
         out = gen_test({'name': 'abc'})
         # Assert
-        assert "'test_json_escape'" in out
-        assert "'test_json_unescape'" in out
+        assert '\t\ttest_json_escape,\n' in out
+        assert '\t\ttest_json_unescape\n' in out
         
 
     def test_escape_test_names_always_present(self):
@@ -489,8 +506,8 @@ class TestEscapeBlock:
         # Arrange / Act
         out = gen_test({'n': 1})
         # Assert
-        assert "'test_json_escape'" in out
-        assert "'test_json_unescape'" in out
+        assert '\t\ttest_json_escape,\n' in out
+        assert '\t\ttest_json_unescape\n' in out
         
 
     def test_json_escape_doublequote(self):
@@ -680,8 +697,8 @@ class TestExtraBlocks:
         # Arrange / Act
         out = gen_test(self._data)
         # Assert
-        assert "'test_JsonRoot_jsonstr_to_data_str_escaped'" not in out
-        assert "'test_JsonRoot_data_to_jsonstr_str_escaped'" not in out
+        assert '\t\ttest_JsonRoot_jsonstr_to_data_str_escaped' not in out
+        assert '\t\ttest_JsonRoot_data_to_jsonstr_str_escaped' not in out
 
     # --- numbered vars are declared ---
 

@@ -8,22 +8,22 @@
 {#ifdef _TEST_}
 DEFINE_CONFIGURATION(
 	_JIEC_TESTNAMES_LIST_(
-		'test_VariousSchema_jsontext_to_iecdata',
-		'test_VariousSchema_iecdata_to_jsontext',
-		'test_VariousSchema_jsonbytes_to_iecdata',
-		'test_VariousSchema_iecdata_to_jsonbytes',
-		'test_json_char_from_asciicharcode',
-		'test_json_asciicharcode',
-		'test_json_bytes_insert_text',
-		'test_json_find_key',
-		'test_json_bytes_find_key',
-		'test_json_escape',
-		'test_json_find_block',
-		'test_json_extract_scalar',
-		'test_json_bytes_find_block',
-		'test_json_bytes_extract_scalar',
-		'test_json_bytes_to_str',
-		'test_json_unescape'
+		test_VariousSchema_jsontext_to_iecdata,
+		test_VariousSchema_iecdata_to_jsontext,
+		test_VariousSchema_jsonbytes_to_iecdata,
+		test_VariousSchema_iecdata_to_jsonbytes,
+		test_json_char_from_asciicharcode,
+		test_json_asciicharcode,
+		test_json_bytes_insert_text,
+		test_json_find_key,
+		test_json_bytes_find_key,
+		test_json_escape,
+		test_json_find_block,
+		test_json_extract_scalar,
+		test_json_bytes_find_block,
+		test_json_bytes_extract_scalar,
+		test_json_bytes_to_str,
+		test_json_unescape
 	)
 )
 {#undef _TEST_}
@@ -168,6 +168,10 @@ TEST_S(test_VariousSchema_iecdata_to_jsonbytes)
 	EXPECT_EQ_DINT(0, data_rt.counts[2]);
 	EXPECT_FALSE(data_rt.active);
 END_TEST_S
+
+// Guard: emit the shared helper tests once when several generated test files are compiled together
+{#ifndef JSON_TEST_HELPERS_DEFINED}
+{#define JSON_TEST_HELPERS_DEFINED 1}
 
 TEST_S(test_json_char_from_asciicharcode)
 	var
@@ -967,3 +971,5 @@ TEST_S(test_json_unescape)
 	res := json_unescape(in:='\u0080', eno=>ok); // \u: non-ASCII code (128)
 	EXPECT_FALSE(ok);
 END_TEST_S
+
+{#endif}

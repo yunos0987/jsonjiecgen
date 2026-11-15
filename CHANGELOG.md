@@ -2,6 +2,14 @@
 
 このファイルは、jsonjiecgen の利用者に影響する変更を記録します。
 
+## [Unreleased]
+
+### 修正 / Fixed
+
+- 複数の生成物を 1 つのプロジェクトにまとめてコンパイルすると、Jiecc 9.6.0 で共通の補助関数（`json_escape` など）が `DUPLICATE_SYMBOL` になる問題を直しました。補助関数を `{#ifndef JSON_HELPERS_DEFINED}`、補助関数のテストを `{#ifndef JSON_TEST_HELPERS_DEFINED}` で囲み、2 つ目以降の生成物では出さないようにしました。
+- 生成テストコードの `_JIEC_TESTNAMES_LIST_` に渡すテスト名を、文字列リテラル（`'test_...'`）から識別子（`test_...`）に変えました。文字列リテラルのままだと、jier（`jiecc --run`）では `INVALID_SYNTAX_FOR_NAME` で止まり、PLC 向けではテスト名に引用符が含まれていました。
+- `json_bytes_insert_text` が呼ぶ `json_asciicharcode` を、呼び出し元より前に出すようにしました。jier は呼び出しより前に定義された関数しか呼べません。
+
 ## [0.1.0] - 2026-11-01
 
 ### 初回リリース / Initial release

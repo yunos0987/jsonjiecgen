@@ -129,7 +129,8 @@ class JiecUnitGenerator:
         lines = ['{#ifdef _TEST_}', 'DEFINE_CONFIGURATION(', TAB + '_JIEC_TESTNAMES_LIST_(']
         for i, name in enumerate(all_names):
             suffix = ',' if i < len(all_names) - 1 else ''
-            lines.append(TAB + TAB + "'" + name + "'" + suffix)
+            # jiecunit takes bare identifiers (jier binds them as program names)
+            lines.append(TAB + TAB + name + suffix)
         lines += [TAB + ')', ')', '{#undef _TEST_}', '{#endif}']
         return '\n'.join(lines)
 

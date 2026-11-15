@@ -93,6 +93,28 @@ class TestJsonHelpers:
         # Assert
         assert 'sv: string[128];' in fn
 
+    def test_helpers_wrapped_in_include_guard(self):
+        # Fact: the shared helpers are wrapped in a JSON_HELPERS_DEFINED guard that opens before json_escape
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert out.index('{#ifndef JSON_HELPERS_DEFINED}') < out.index('{#define JSON_HELPERS_DEFINED 1}') < out.index('function json_escape')
+
+    def test_helper_guard_closes_before_generated_functions(self):
+        # Fact: the helper guard closes after the last helper and before the model-specific functions
+        # Arrange / Act
+        out = gen({'x': 1})
+        last_helper = out.index('function json_unescape')
+        # Assert
+        assert last_helper < out.index('{#endif}', last_helper) < out.index('function JsonRoot_iecdata_to_jsontext')
+
+    def test_asciicharcode_defined_before_its_caller(self):
+        # Fact: json_asciicharcode is defined before json_bytes_insert_text, which calls it
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert out.index('function json_asciicharcode') < out.index('function json_bytes_insert_text')
+
 
 class TestVersionGuard:
     def test_guard_condition(self):
