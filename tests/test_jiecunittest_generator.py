@@ -65,8 +65,32 @@ class TestHeader:
         # Arrange / Act
         out = gen_test({'x': 1})
         # Assert
-        assert "'test_JsonRoot_jsontext_to_iecdata'" in out
-        assert "'test_JsonRoot_iecdata_to_jsontext'" in out
+        assert '\t\ttest_JsonRoot_jsontext_to_iecdata,\n' in out
+        assert '\t\ttest_JsonRoot_iecdata_to_jsontext,\n' in out
+
+    def test_test_names_are_bare_identifiers(self):
+        # Fact: the test name list holds bare identifiers, not quoted string literals
+        # Arrange
+        out = gen_test({'x': 1})
+        # Act
+        block = out.split('_JIEC_TESTNAMES_LIST_(', 1)[1].split(')', 1)[0]
+        # Assert
+        assert "'" not in block
+
+    def test_real_text_test_listed_last(self):
+        # Fact: the json_real_text helper test is listed as the last test name
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert '\t\ttest_json_real_text\n\t)' in out
+
+    def test_helper_tests_wrapped_in_include_guard(self):
+        # Fact: the shared helper tests sit inside a JSON_TEST_HELPERS_DEFINED guard
+        # Arrange / Act
+        out = gen_test({'x': 1})
+        # Assert
+        assert out.index('{#ifndef JSON_TEST_HELPERS_DEFINED}') < out.index('TEST_S(test_json_char_from_asciicharcode)')
+        assert out.rstrip('\n').endswith('{#endif}')
 
 
 # ---------------------------------------------------------------------------
@@ -480,8 +504,8 @@ class TestEscapeBlock:
         # Arrange / Act
         out = gen_test({'name': 'abc'})
         # Assert
-        assert "'test_json_escape'" in out
-        assert "'test_json_unescape'" in out
+        assert '\t\ttest_json_escape,\n' in out
+        assert '\t\ttest_json_unescape,\n' in out
         
 
     def test_escape_test_names_always_present(self):
@@ -489,8 +513,8 @@ class TestEscapeBlock:
         # Arrange / Act
         out = gen_test({'n': 1})
         # Assert
-        assert "'test_json_escape'" in out
-        assert "'test_json_unescape'" in out
+        assert '\t\ttest_json_escape,\n' in out
+        assert '\t\ttest_json_unescape,\n' in out
         
 
     def test_json_escape_doublequote(self):
@@ -654,16 +678,16 @@ class TestEscapeBlock:
         assert f.type.iec_type == 'string[64]'
 
     def test_eleven_end_test_s_blocks(self):
-        # Fact: 16 END_TEST_S blocks are generated for a model with string fields
+        # Fact: 17 END_TEST_S blocks are generated for a model with string fields
         # Arrange / Act
         out = gen_test({'name': 'abc'})
         # jsonstr_to_data, data_to_jsonstr, jsonbytes_to_data, data_to_jsonbytes,
         # json_char_from_asciicharcode, json_asciicharcode,
         # json_bytes_insert_text, json_find_key, json_bytes_find_key,
         # json_escape, json_find_block, json_extract_scalar, json_bytes_find_block,
-        # json_bytes_extract_scalar, json_bytes_to_str, json_unescape
+        # json_bytes_extract_scalar, json_bytes_to_str, json_unescape, json_real_text
         # Assert
-        assert out.count('END_TEST_S') == 16
+        assert out.count('END_TEST_S') == 17
 
 
 # ---------------------------------------------------------------------------
@@ -680,8 +704,8 @@ class TestExtraBlocks:
         # Arrange / Act
         out = gen_test(self._data)
         # Assert
-        assert "'test_JsonRoot_jsonstr_to_data_str_escaped'" not in out
-        assert "'test_JsonRoot_data_to_jsonstr_str_escaped'" not in out
+        assert '\t\ttest_JsonRoot_jsonstr_to_data_str_escaped' not in out
+        assert '\t\ttest_JsonRoot_data_to_jsonstr_str_escaped' not in out
 
     # --- numbered vars are declared ---
 
@@ -854,20 +878,20 @@ class TestExtraBlocks:
     # --- total block count (merged → only 4 TEST_S with strings) ---
 
     def test_total_end_test_s_count_with_string(self):
-        # Fact: 16 END_TEST_S blocks are generated for a model with mixed field types
+        # Fact: 17 END_TEST_S blocks are generated for a model with mixed field types
         # Arrange / Act
         out = gen_test(self._data)
-        # 4 model tests + 12 helper tests = 16
+        # 4 model tests + 13 helper tests = 17
         # Assert
-        assert out.count('END_TEST_S') == 16
+        assert out.count('END_TEST_S') == 17
 
     def test_total_end_test_s_count_no_string(self):
-        # Fact: 16 END_TEST_S blocks are generated for a model with only numeric fields
+        # Fact: 17 END_TEST_S blocks are generated for a model with only numeric fields
         # Arrange / Act
         out = gen_test({'n': 1, 'v': 2.5})
-        # same 16 blocks (helpers always included)
+        # same 17 blocks (helpers always included)
         # Assert
-        assert out.count('END_TEST_S') == 16
+        assert out.count('END_TEST_S') == 17
 
 
 # ---------------------------------------------------------------------------

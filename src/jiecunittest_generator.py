@@ -98,7 +98,7 @@ class JiecUnitGenerator:
             'test_json_escape', 'test_json_find_block',
             'test_json_extract_scalar', 'test_json_bytes_find_block',
             'test_json_bytes_extract_scalar', 'test_json_bytes_to_str',
-            'test_json_unescape',
+            'test_json_unescape', 'test_json_real_text',
         ]
 
         parts = [
@@ -129,7 +129,8 @@ class JiecUnitGenerator:
         lines = ['{#ifdef _TEST_}', 'DEFINE_CONFIGURATION(', TAB + '_JIEC_TESTNAMES_LIST_(']
         for i, name in enumerate(all_names):
             suffix = ',' if i < len(all_names) - 1 else ''
-            lines.append(TAB + TAB + "'" + name + "'" + suffix)
+            # jiecunit takes bare identifiers (jier binds them as program names)
+            lines.append(TAB + TAB + name + suffix)
         lines += [TAB + ')', ')', '{#undef _TEST_}', '{#endif}']
         return '\n'.join(lines)
 

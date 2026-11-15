@@ -39,6 +39,7 @@ With testing (--test):
 - Python 3.10 以降
 - [Jiecc](https://www.graviness.com/iec_61131-3/jiecc.html) 9.2.0 以降 — 生成コードのコンパイルに必要（生成コードの先頭に、9.2.0 未満では `{#error}` で止まるバージョンガードを出力します）
 - [jiecunit](https://github.com/yunos0987/jiecunit) 6.0.0 以降 — 生成テストコード（`--test`）を使う場合に必要
+- `tests/outputs` の生成テストコード 11 件は、Jiecc 9.4.0 と 9.6.0 で、jiecunit 6.0.0・7.0.0・8.0.0 のどれとも `-t omron` でコンパイルできることを確認しています。jier（`jiecc --run`）での実行は、Jiecc 9.6.0 と jiecunit 8.0.0 で確認しています。
 
 ## インストール
 

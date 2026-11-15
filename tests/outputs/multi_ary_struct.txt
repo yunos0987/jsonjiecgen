@@ -15,6 +15,10 @@ type
 		sensors: array[0..1] of MultiAryStruct_sensors_t;
 	end_struct;
 end_type
+// Guard: emit the shared helpers once when several generated files are compiled together
+{#ifndef JSON_HELPERS_DEFINED}
+{#define JSON_HELPERS_DEFINED 1}
+
 {#ifndef JSON_STRING_SIZE}
 	{#define JSON_STRING_SIZE 1024}
 {#endif}
@@ -127,6 +131,26 @@ function json_char_from_asciicharcode: string[8]
 	end_case;
 end_function
 
+// Defined before json_bytes_insert_text, which calls it (jier needs callees first)
+function json_asciicharcode: dint
+	_DEFINE_ENENO_()
+	var_input in: string[2]; end_var
+	var_temp
+		printable: string[128] := ' !"#$$%&$27()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+	end_var
+	json_asciicharcode := find(printable, in) + 31;
+	if json_asciicharcode <= 31 then
+		if      in = '$08' then json_asciicharcode := 8;
+		elsif   in = '$t'  then json_asciicharcode := 9;
+		elsif   in = '$n'  then json_asciicharcode := 10;
+		elsif   in = '$0b' then json_asciicharcode := 11;
+		elsif   in = '$0c' then json_asciicharcode := 12;
+		elsif   in = '$r'  then json_asciicharcode := 13;
+		else json_asciicharcode := 0;
+		end_if;
+	end_if;
+end_function
+
 function json_bytes_insert_text: dint
 	_DEFINE_ENENO_()
 	var_in_out dat: array[*] of byte; end_var
@@ -149,25 +173,6 @@ function json_bytes_insert_text: dint
 		ci := ci + 1;
 	end_while;
 	json_bytes_insert_text := wp;
-end_function
-
-function json_asciicharcode: dint
-	_DEFINE_ENENO_()
-	var_input in: string[2]; end_var
-	var_temp
-		printable: string[128] := ' !"#$$%&$27()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
-	end_var
-	json_asciicharcode := find(printable, in) + 31;
-	if json_asciicharcode <= 31 then
-		if      in = '$08' then json_asciicharcode := 8;
-		elsif   in = '$t'  then json_asciicharcode := 9;
-		elsif   in = '$n'  then json_asciicharcode := 10;
-		elsif   in = '$0b' then json_asciicharcode := 11;
-		elsif   in = '$0c' then json_asciicharcode := 12;
-		elsif   in = '$r'  then json_asciicharcode := 13;
-		else json_asciicharcode := 0;
-		end_if;
-	end_if;
 end_function
 
 function json_find_key : dint
@@ -279,9 +284,9 @@ function json_find_block
 	// Writes the block into block. Sets eno=false if key not found or brackets unmatched.
 	pos := json_find_key(dat:=dat, key:=key);
 	if pos = 0 then eno := false; return; end_if;
-	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
+	pos := pos + len(key) + 3;  // skip '"key":'
 	qos := pos;
-	slen := uint_to_dint(len(dat));
+	slen := len(dat);
 	depth := 1;
 	while depth > 0 do
 		qos := qos + 1;
@@ -314,8 +319,8 @@ function json_extract_scalar
 	// Writes the value into sv. Sets eno=false if key not found or no delimiter.
 	pos := json_find_key(dat:=dat, key:=key);
 	if pos = 0 then eno := false; return; end_if;
-	pos := pos + uint_to_dint(len(key)) + 3;  // skip '"key":'
-	slen := uint_to_dint(len(dat));
+	pos := pos + len(key) + 3;  // skip '"key":'
+	slen := len(dat);
 	tail := mid(dat, dint_to_uint(slen - pos + 1), dint_to_uint(pos));
 	qp := find(tail, ',');
 	if qp = 0 then qp := find(tail, '}'); end_if;
@@ -497,7 +502,22 @@ function json_unescape: string[JSON_STRING_SIZE]
 	end_while;
 	json_unescape := result;
 end_function
-	
+
+function json_real_text: string[JSON_STRING_SIZE]
+	var_input in: string[JSON_STRING_SIZE]; end_var
+	var_temp
+		ep: dint;
+	end_var
+	// JSON allows an exponent without a fraction ('1e3'); IEC real text needs one ('1.0e3').
+	json_real_text := in;
+	if find(in, '.') > 0 then return; end_if;
+	ep := find(in, 'e');
+	if ep = 0 then ep := find(in, 'E'); end_if;
+	if ep = 0 then return; end_if;
+	json_real_text := insert(in, '.0', dint_to_uint(ep - 1));
+end_function
+
+{#endif}
 function private_MultiAryStruct_sensors_t_jsonbytes_to_iecdata
 	_DEFINE_ENENO_()
 	var_in_out bytes: array[*] of byte; end_var
@@ -530,7 +550,7 @@ function private_MultiAryStruct_sensors_t_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.values[0] := string_to_lreal(sv);
+	data.values[0] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// [1]
 	qos := pos1;
@@ -540,7 +560,7 @@ function private_MultiAryStruct_sensors_t_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.values[1] := string_to_lreal(sv);
+	data.values[1] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// [2]
 	qos := pos1;
@@ -550,7 +570,7 @@ function private_MultiAryStruct_sensors_t_jsonbytes_to_iecdata
 	if qos > jblk1_bei then eno := false; return; end_if;
 	json_bytes_to_str(dat:=bytes, start_index:=pos1, end_index:=qos - 1, sv:=sv, eno=>eno);
 	if not eno then return; end_if;
-	data.values[2] := string_to_lreal(sv);
+	data.values[2] := string_to_lreal(json_real_text(in:=sv));
 	pos1 := qos + 1;
 	// flags: array
 	json_bytes_find_block(dat:=bytes, key:=key_flags, open_byte:=byte#91, close_byte:=byte#93, start_index:=start_index, end_index:=end_index, block_start_index:=jblk1_bsi, block_end_index:=jblk1_bei, eno=>eno);
@@ -641,7 +661,7 @@ function private_MultiAryStruct_sensors_t_jsontext_to_iecdata
 	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_in_out data: MultiAryStruct_sensors_t; end_var
 	var_temp
-		pos, qos, qp: dint;
+		pos, qos, slen, qp: dint;
 		sv: string[256];
 		pos1: dint;
 		jblk1: string[JSON_STRING_SIZE];
@@ -661,19 +681,19 @@ function private_MultiAryStruct_sensors_t_jsontext_to_iecdata
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.values[0] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.values[0] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// [1]
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.values[1] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.values[1] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// [2]
 	jblk1_sub := mid(jblk1, dint_to_uint(jblk1_len - pos1 + 1), dint_to_uint(pos1));
 	qp := find(jblk1_sub, ',');
 	if qp = 0 then qp := find(jblk1_sub, ']'); end_if;
-	data.values[2] := string_to_lreal(mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1)));
+	data.values[2] := string_to_lreal(json_real_text(in:=mid(jblk1, dint_to_uint(qp - 1), dint_to_uint(pos1))));
 	pos1 := pos1 + qp;
 	// flags: array
 	json_find_block(dat:=txt, key:='flags', open_ch:='[', close_ch:=']', block:=jblk1, eno=>eno);
@@ -1027,7 +1047,7 @@ function MultiAryStruct_jsontext_to_iecdata
 	var_in_out txt: string[JSON_STRING_SIZE]; end_var
 	var_in_out data: MultiAryStruct_t; end_var
 	var_temp
-		pos, qos, qp: dint;
+		pos, qos, slen, qp: dint;
 		pos1, pos2: dint;
 		jblk1: string[JSON_STRING_SIZE];
 		jblk1_len: dint;

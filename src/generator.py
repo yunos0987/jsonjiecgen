@@ -30,6 +30,18 @@ _TO_STR = {
     'lreal': 'lreal_to_string',
 }
 
+_REAL_TYPES = {'real', 'lreal'}
+
+
+def _from_str_expr(iec_type: str, text: str = 'sv') -> str:
+    """IEC expression converting the JSON number text expression `text` to iec_type."""
+    from_str = _FROM_STR.get(iec_type, 'string_to_' + iec_type)
+    if iec_type in _REAL_TYPES:
+        # IEC real text needs a fraction before the exponent ('1e3' -> '1.0e3')
+        return from_str + '(json_real_text(in:=' + text + '))'
+    return from_str + '(' + text + ')'
+
+
 def _read_src(name: str) -> str:
     return (_pathlib.Path(__file__).parent / name).read_text(encoding='utf-8').rstrip('\n')
 
@@ -485,9 +497,9 @@ class IecGenerator:
         needs_pos_qos = self._direct_has_string(t) or self._needs_depth_v2(t) or self._has_string_array(t)
         needs_qp = self._has_array(t)
         if needs_pos_qos and needs_qp:
-            var_lines.append('pos, qos, qp: dint;')
+            var_lines.append('pos, qos, slen, qp: dint;')
         elif needs_pos_qos:
-            var_lines.append('pos, qos: dint;')
+            var_lines.append('pos, qos, slen: dint;')
         elif needs_qp:
             var_lines.append('qp: dint;')
         if self._direct_has_non_string_scalar(t):
@@ -560,7 +572,8 @@ class IecGenerator:
                 'if pos = 0 then eno := false; return; end_if;',
                 'pos := pos + ' + str(offset) + ';',
                 'qos := pos;',
-                'while qos <= uint_to_dint(len(' + json_var + ')) do',
+                'slen := len(' + json_var + ');',
+                'while qos <= slen do',
                 TAB + "if mid(" + json_var + ", 1, dint_to_uint(qos)) = '\\' then qos := qos + 2;",
                 TAB + "elsif mid(" + json_var + ", 1, dint_to_uint(qos)) = '\"' then exit;",
                 TAB + 'else qos := qos + 1;',
@@ -576,12 +589,11 @@ class IecGenerator:
                 'if not eno then return; end_if;',
                 data_path + " := sv = 'true';",
             ]
-        from_str = _FROM_STR.get(t.iec_type, 'string_to_' + t.iec_type)
         return [
             '// ' + key + ': ' + t.iec_type,
             "json_extract_scalar(dat:=" + json_var + ", key:='" + key + "', sv:=sv, eno=>eno);",
             'if not eno then return; end_if;',
-            data_path + ' := ' + from_str + '(sv);',
+            data_path + ' := ' + _from_str_expr(t.iec_type) + ';',
         ]
 
     def _struct_from_json(self, st: StructType, data_path: str,
@@ -675,7 +687,6 @@ class IecGenerator:
                     lines.append(pos_v + ' := ' + pos_v + ' + qp;')
                 return lines
             # numeric
-            from_str = _FROM_STR.get(elem.iec_type, 'string_to_' + elem.iec_type)
             lines.append(pos_v + ' := 2;')
             for idx in range(t.size):
                 full_idx = idx_parts + [str(idx)]
@@ -683,7 +694,8 @@ class IecGenerator:
                 lines.append(jblk_sub_v + ' := mid(' + jblk_v + ', dint_to_uint(' + jblk_len_v + ' - ' + pos_v + ' + 1), dint_to_uint(' + pos_v + '));')
                 lines.append("qp := find(" + jblk_sub_v + ", ',');")
                 lines.append("if qp = 0 then qp := find(" + jblk_sub_v + ", ']'); end_if;")
-                lines.append(data_path + '[' + ', '.join(full_idx) + '] := ' + from_str + '(mid(' + jblk_v + ', dint_to_uint(qp - 1), dint_to_uint(' + pos_v + ')));')
+                elem_text = 'mid(' + jblk_v + ', dint_to_uint(qp - 1), dint_to_uint(' + pos_v + '))'
+                lines.append(data_path + '[' + ', '.join(full_idx) + '] := ' + _from_str_expr(elem.iec_type, elem_text) + ';')
                 lines.append(pos_v + ' := ' + pos_v + ' + qp;')
             return lines
 
@@ -768,7 +780,6 @@ class IecGenerator:
                 return lines
 
             # numeric
-            from_str = _FROM_STR.get(elem.iec_type, 'string_to_' + elem.iec_type)
             for idx in range(t.size):
                 full_idx = idx_parts + [str(idx)]
                 lines.append('// [' + str(idx) + ']')
@@ -779,7 +790,7 @@ class IecGenerator:
                 lines.append('if qos > ' + bei_v + ' then eno := false; return; end_if;')
                 lines.append('json_bytes_to_str(dat:=' + json_var + ', start_index:=' + pos_v + ', end_index:=qos - 1, sv:=sv, eno=>eno);')
                 lines.append('if not eno then return; end_if;')
-                lines.append(data_path + '[' + ', '.join(full_idx) + '] := ' + from_str + '(sv);')
+                lines.append(data_path + '[' + ', '.join(full_idx) + '] := ' + _from_str_expr(elem.iec_type) + ';')
                 lines.append(pos_v + ' := qos + 1;')
             return lines
 
@@ -879,12 +890,11 @@ class IecGenerator:
                 'if not eno then return; end_if;',
                 data_path + " := sv = 'true';",
             ]
-        from_str = _FROM_STR.get(t.iec_type, 'string_to_' + t.iec_type)
         return [
             '// ' + key + ': ' + t.iec_type,
             'json_bytes_extract_scalar(dat:=' + bv + ', key:=key_' + key + ', start_index:=' + si_expr + ', end_index:=' + ei_expr + ', sv:=sv, eno=>eno);',
             'if not eno then return; end_if;',
-            data_path + ' := ' + from_str + '(sv);',
+            data_path + ' := ' + _from_str_expr(t.iec_type) + ';',
         ]
 
     def _gen_jsonbytes_to_data(self, model: TypeModel) -> str:

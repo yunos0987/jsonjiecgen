@@ -93,6 +93,66 @@ class TestJsonHelpers:
         # Assert
         assert 'sv: string[128];' in fn
 
+    def test_helpers_wrapped_in_include_guard(self):
+        # Fact: the shared helpers are wrapped in a JSON_HELPERS_DEFINED guard that opens before json_escape
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert out.index('{#ifndef JSON_HELPERS_DEFINED}') < out.index('{#define JSON_HELPERS_DEFINED 1}') < out.index('function json_escape')
+
+    def test_helper_guard_closes_before_generated_functions(self):
+        # Fact: the helper guard closes after the last helper and before the model-specific functions
+        # Arrange / Act
+        out = gen({'x': 1})
+        last_helper = out.index('function json_unescape')
+        # Assert
+        assert last_helper < out.index('{#endif}', last_helper) < out.index('function JsonRoot_iecdata_to_jsontext')
+
+    def test_asciicharcode_defined_before_its_caller(self):
+        # Fact: json_asciicharcode is defined before json_bytes_insert_text, which calls it
+        # Arrange / Act
+        out = gen({'x': 1})
+        # Assert
+        assert out.index('function json_asciicharcode') < out.index('function json_bytes_insert_text')
+
+    def test_real_field_text_normalized_before_conversion(self):
+        # Fact: a JSON number field is converted via json_real_text in both text and bytes parsers
+        # Arrange / Act
+        out = gen({'v': 1.5})
+        # Assert
+        assert out.count('data.v := string_to_lreal(json_real_text(in:=sv));') == 2
+
+    def test_integer_field_not_normalized(self):
+        # Fact: an integer field is converted directly without json_real_text
+        # Arrange / Act
+        out = gen({'n': 1})
+        # Assert
+        assert 'data.n := string_to_dint(sv);' in out
+        assert 'string_to_dint(json_real_text' not in out
+
+    def test_real_array_elements_normalized(self):
+        # Fact: real array elements are converted via json_real_text in both text and bytes parsers
+        # Arrange / Act
+        out = gen({'a': [1.5, 2.5]})
+        # Assert
+        assert out.count('string_to_lreal(json_real_text(in:=') == 4
+
+    def test_string_scan_compares_with_dint_length(self):
+        # Fact: the string value scan stores len() in the dint slen before comparing (no signed/unsigned mix)
+        # Arrange / Act
+        out = gen({'name': 'abc'})
+        fn = out.split('function JsonRoot_jsontext_to_iecdata')[1].split('end_function')[0]
+        # Assert
+        assert 'pos, qos, slen: dint;' in fn
+        assert 'slen := len(txt);\n\twhile qos <= slen do' in fn
+
+    def test_real_text_helper_defined_before_generated_functions(self):
+        # Fact: json_real_text is defined among the helpers, before the model-specific functions
+        # Arrange / Act
+        out = gen({'v': 1.5})
+        # Assert
+        assert out.index('function json_real_text') < out.index('function JsonRoot_jsontext_to_iecdata')
+
 
 class TestVersionGuard:
     def test_guard_condition(self):
@@ -318,7 +378,7 @@ class TestJsonToData:
         out = gen({'val': 1.0})
         # Assert
         assert "json_extract_scalar(dat:=txt, key:='val', sv:=sv, eno=>eno)" in out
-        assert 'string_to_lreal(sv)' in out
+        assert 'string_to_lreal(json_real_text(in:=sv))' in out
 
     def test_bool_extraction(self):
         # Fact: jsontext_to_iecdata generates correct boolean field extraction
